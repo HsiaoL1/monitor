@@ -1,0 +1,126 @@
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+.ant-layout {
+  min-height: 100vh;
+}
+
+.service-card {
+  margin-bottom: 16px;
+}
+
+.service-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-running {
+  color: #52c41a;
+}
+
+.status-stopped {
+  color: #ff4d4f;
+}
+
+.status-unknown {
+  color: #d9d9d9;
+}
+
+.metric-card {
+  text-align: center;
+}
+
+.metric-value {
+  font-size: 24px;
+  font-weight: bold;
+  margin: 8px 0;
+}
+
+.chart-container {
+  height: 300px;
+  margin: 20px 0;
+}
+
+/* 终端样式 */
+.terminal-container {
+  background-color: #1e1e1e;
+  color: #d4d4d4;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.terminal-input {
+  background-color: transparent !important;
+  color: #d4d4d4 !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.terminal-input:focus {
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* 日志查看器样式 */
+.log-viewer-container {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.log-line {
+  font-size: 12px;
+  line-height: 1.4;
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
+.log-line-error {
+  color: #ff4d4f;
+}
+
+.log-line-warn {
+  color: #faad14;
+}
+
+.log-line-info {
+  color: #1890ff;
+}
+
+.log-line-debug {
+  color: #52c41a;
+}
+
+.log-line-trace {
+  color: #722ed1;
+}
+
+/* 系统信息卡片 */
+.system-info-card {
+  height: 100%;
+}
+
+.system-info-card .ant-card-body {
+  height: calc(100% - 57px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.error-row {
+  background-color: #fff2f0 !important;
+}
+.warn-row {
+  background-color: #fff7e6 !important;
+}
