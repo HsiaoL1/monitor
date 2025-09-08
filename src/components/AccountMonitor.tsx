@@ -148,7 +148,7 @@ const AccountMonitor: React.FC = () => {
   };
 
   const getAccountStatusText = (status: number) => {
-    return status === 1 ? { text: '启用', color: 'success' } : { text: '禁用', color: 'error' };
+    return status === 1 ? { text: '启用', color: 'success' } : { text: '封号', color: 'error' };
   };
 
   const columns = [

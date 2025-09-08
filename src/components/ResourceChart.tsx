@@ -3,13 +3,14 @@ import { Card, Row, Col, Spin, Alert, Button, Select, Tag } from 'antd';
 import { ReloadOutlined, PlayCircleOutlined, PauseCircleOutlined } from '@ant-design/icons';
 import ReactECharts from 'echarts-for-react';
 import { fetchResourceHistory } from '../services/api';
-import { ResourceHistoryResponse, ServiceResourceHistory, ResourceDataPoint } from '../types';
+import { ResourceHistoryResponse } from '../types';
 
 const { Option } = Select;
 
 const ResourceChart: React.FC = () => {
   const [historyData, setHistoryData] = useState<ResourceHistoryResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isAutoRefresh, setIsAutoRefresh] = useState(true);
   const [timeRange, setTimeRange] = useState<number>(60); // 默认60分钟
@@ -26,96 +27,129 @@ const ResourceChart: React.FC = () => {
     const services = Object.values(newData.services);
     const runningServices = services.filter(service => service.status === 'running');
     
-    if (runningServices.length === 0) return;
-    
-    // 找到新的数据点（基于时间戳）
-    const newTimePoints: string[] = [];
-    const newDataPoints: {[serviceName: string]: {cpu: number[], memory: number[]}} = {};
-    
-    runningServices.forEach(service => {
-      service.dataPoints.forEach(point => {
-        if (!lastUpdateTime.current || point.timestampFormatted > lastUpdateTime.current) {
-          if (!newTimePoints.includes(point.timestampFormatted)) {
-            newTimePoints.push(point.timestampFormatted);
-          }
-          if (!newDataPoints[service.serviceName]) {
-            newDataPoints[service.serviceName] = {cpu: [], memory: []};
-          }
-        }
-      });
-    });
-    
-    if (newTimePoints.length === 0) return;
-    
-    // 按时间戳排序新数据点
-    newTimePoints.sort();
-    
-    // 为每个服务收集对应时间点的数据
-    runningServices.forEach(service => {
-      newTimePoints.forEach(timePoint => {
-        const dataPoint = service.dataPoints.find(p => p.timestampFormatted === timePoint);
-        if (dataPoint) {
-          if (!newDataPoints[service.serviceName]) {
-            newDataPoints[service.serviceName] = {cpu: [], memory: []};
-          }
-          newDataPoints[service.serviceName].cpu.push(dataPoint.cpu);
-          newDataPoints[service.serviceName].memory.push(dataPoint.memory);
-        }
-      });
-    });
-    
-    try {
-      // 更新CPU图表
-      if (cpuChartRef.current) {
-        const cpuChart = cpuChartRef.current.getEchartsInstance();
-        runningServices.forEach((service, seriesIndex) => {
-          const serviceData = newDataPoints[service.serviceName];
-          if (serviceData && serviceData.cpu.length > 0) {
-            serviceData.cpu.forEach((cpuValue, dataIndex) => {
-              const timePoint = newTimePoints[dataIndex];
-              cpuChart.appendData({
-                seriesIndex,
-                data: [[timePoint, cpuValue]],
-              });
-            });
-          }
-        });
-      }
-      
-      // 更新内存图表
-      if (memoryChartRef.current) {
-        const memoryChart = memoryChartRef.current.getEchartsInstance();
-        runningServices.forEach((service, seriesIndex) => {
-          const serviceData = newDataPoints[service.serviceName];
-          if (serviceData && serviceData.memory.length > 0) {
-            serviceData.memory.forEach((memoryValue, dataIndex) => {
-              const timePoint = newTimePoints[dataIndex];
-              memoryChart.appendData({
-                seriesIndex,
-                data: [[timePoint, memoryValue]],
-              });
-            });
-          }
-        });
-      }
-    } catch (error) {
-      console.warn('Failed to append data to charts, falling back to full update:', error);
-      // 如果增量更新失败，回退到完全更新
+    if (runningServices.length === 0) {
+      // 如果没有运行中的服务，直接更新数据
       setHistoryData(newData);
       return;
     }
     
-    // 更新最后更新时间
-    if (newTimePoints.length > 0) {
-      lastUpdateTime.current = newTimePoints[newTimePoints.length - 1];
+    // 获取当前图表实例
+    const cpuChart = cpuChartRef.current?.getEchartsInstance();
+    const memoryChart = memoryChartRef.current?.getEchartsInstance();
+    
+    if (!cpuChart || !memoryChart) {
+      // 如果图表还未初始化，直接更新数据
+      setHistoryData(newData);
+      return;
     }
     
-    // 更新状态数据（用于状态显示）
+    // 找到新的数据点（基于时间戳）
+    const allNewTimePoints: string[] = [];
+    const newDataPoints: {[serviceName: string]: {cpu: number[], memory: number[], times: string[]}} = {};
+    
+    // 收集所有新的时间点
+    runningServices.forEach(service => {
+      service.dataPoints.forEach(point => {
+        if (!lastUpdateTime.current || point.timestampFormatted > lastUpdateTime.current) {
+          if (!allNewTimePoints.includes(point.timestampFormatted)) {
+            allNewTimePoints.push(point.timestampFormatted);
+          }
+        }
+      });
+    });
+    
+    if (allNewTimePoints.length === 0) {
+      // 没有新数据点，只更新状态数据
+      setHistoryData(newData);
+      return;
+    }
+    
+    // 按时间戳排序
+    allNewTimePoints.sort();
+    
+    // 为每个服务收集新的数据点
+    runningServices.forEach(service => {
+      const serviceNewData = {cpu: [] as number[], memory: [] as number[], times: [] as string[]};
+      
+      allNewTimePoints.forEach(timePoint => {
+        const dataPoint = service.dataPoints.find(p => p.timestampFormatted === timePoint);
+        if (dataPoint) {
+          serviceNewData.cpu.push(dataPoint.cpu);
+          serviceNewData.memory.push(dataPoint.memory);
+          serviceNewData.times.push(timePoint);
+        } else {
+          // 如果某个时间点没有数据，用null填充
+          serviceNewData.cpu.push(null as any);
+          serviceNewData.memory.push(null as any);
+          serviceNewData.times.push(timePoint);
+        }
+      });
+      
+      if (serviceNewData.times.length > 0) {
+        newDataPoints[service.serviceName] = serviceNewData;
+      }
+    });
+    
+    try {
+      // 批量更新CPU图表
+      const currentCpuOptions = cpuChart.getOption();
+      const currentCpuSeries = currentCpuOptions.series || [];
+      
+      runningServices.forEach((service, seriesIndex) => {
+        const serviceData = newDataPoints[service.serviceName];
+        if (serviceData && serviceData.cpu.length > 0 && seriesIndex < currentCpuSeries.length) {
+          // 构建新的数据点数组
+          const newDataPoints = serviceData.times.map((time, index) => [time, serviceData.cpu[index]]).filter(point => point[1] !== null);
+          
+          if (newDataPoints.length > 0) {
+            cpuChart.appendData({
+              seriesIndex,
+              data: newDataPoints,
+            });
+          }
+        }
+      });
+      
+      // 批量更新内存图表
+      const currentMemoryOptions = memoryChart.getOption();
+      const currentMemorySeries = currentMemoryOptions.series || [];
+      
+      runningServices.forEach((service, seriesIndex) => {
+        const serviceData = newDataPoints[service.serviceName];
+        if (serviceData && serviceData.memory.length > 0 && seriesIndex < currentMemorySeries.length) {
+          // 构建新的数据点数组
+          const newDataPoints = serviceData.times.map((time, index) => [time, serviceData.memory[index]]).filter(point => point[1] !== null);
+          
+          if (newDataPoints.length > 0) {
+            memoryChart.appendData({
+              seriesIndex,
+              data: newDataPoints,
+            });
+          }
+        }
+      });
+      
+      // 更新最后更新时间
+      lastUpdateTime.current = allNewTimePoints[allNewTimePoints.length - 1];
+      
+    } catch (error) {
+      console.warn('Incremental chart update failed, falling back to full update:', error);
+      // 如果增量更新失败，回退到完全更新
+      lastUpdateTime.current = null; // 重置时间戳
+      setHistoryData(newData);
+      return;
+    }
+    
+    // 更新状态数据（用于状态显示和其他UI元素）
     setHistoryData(newData);
   }, []);
 
   const fetchHistoryData = useCallback(async (isFullRefresh: boolean = false) => {
-    setLoading(true);
+    if (isFullRefresh || isInitialLoad || !historyData) {
+      setLoading(true);
+    } else {
+      setIsRefreshing(true);
+    }
     setError(null);
 
     try {
@@ -137,6 +171,7 @@ const ResourceChart: React.FC = () => {
       setError('获取资源历史数据失败，请检查后端服务是否支持历史数据接口');
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   }, [timeRange, historyData, isInitialLoad, updateChartsIncrementally]);
 
@@ -184,6 +219,13 @@ const ResourceChart: React.FC = () => {
         symbol: 'none',
         lineStyle: {
           width: 2,
+        },
+        animationDelay: (idx: number) => idx * 50, // 逐个显示动画
+        emphasis: {
+          focus: 'series',
+          lineStyle: {
+            width: 3,
+          }
         },
         itemStyle: {
           color: colors[index % colors.length],
@@ -245,7 +287,9 @@ const ResourceChart: React.FC = () => {
         }
       },
       series: series,
-      animation: false, // 禁用动画以提高增量更新性能
+      animation: true, // 启用平滑动画
+      animationDuration: 300, // 动画持续时间
+      animationEasing: 'cubicOut', // 缓动效果
     };
   };
 
@@ -312,27 +356,63 @@ const ResourceChart: React.FC = () => {
         />
       )}
 
-      {loading && Object.keys(historyData?.services || {}).length === 0 ? (
+      {loading && !historyData ? (
         <Spin size="large" style={{ display: 'block', textAlign: 'center', marginTop: '50px' }} />
       ) : (
         <Row gutter={[16, 16]}>
           <Col span={24}>
-            <Card title="CPU 使用率趋势" loading={loading}>
+            <Card 
+              title={
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>CPU 使用率趋势</span>
+                  {isRefreshing && (
+                    <span style={{ fontSize: 12, color: '#1890ff' }}>
+                      <ReloadOutlined spin /> 更新中...
+                    </span>
+                  )}
+                </div>
+              }
+              loading={loading && !historyData}
+            >
               <ReactECharts
                 ref={cpuChartRef}
                 option={generateChartOption('CPU 使用率 (%)', 'cpu')}
-                style={{ height: '400px' }}
-                showLoading={loading}
+                style={{ 
+                  height: '400px',
+                  transition: 'opacity 0.3s ease',
+                  opacity: isRefreshing ? 0.9 : 1
+                }}
+                showLoading={loading && !historyData}
+                notMerge={false}
+                lazyUpdate={true}
               />
             </Card>
           </Col>
           <Col span={24}>
-            <Card title="内存使用量趋势" loading={loading}>
+            <Card 
+              title={
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>内存使用量趋势</span>
+                  {isRefreshing && (
+                    <span style={{ fontSize: 12, color: '#1890ff' }}>
+                      <ReloadOutlined spin /> 更新中...
+                    </span>
+                  )}
+                </div>
+              }
+              loading={loading && !historyData}
+            >
               <ReactECharts
                 ref={memoryChartRef}
                 option={generateChartOption('内存使用量 (MB)', 'memory')}
-                style={{ height: '400px' }}
-                showLoading={loading}
+                style={{ 
+                  height: '400px',
+                  transition: 'opacity 0.3s ease',
+                  opacity: isRefreshing ? 0.9 : 1
+                }}
+                showLoading={loading && !historyData}
+                notMerge={false}
+                lazyUpdate={true}
               />
             </Card>
           </Col>

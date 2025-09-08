@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+// 外部函数声明 - 这些函数在其他文件中定义
+
 var (
 	autoReplaceTaskRunning   bool
 	autoReplaceTaskMutex     sync.Mutex
@@ -17,6 +19,8 @@ var (
 	autoReplaceStatusMessage string
 	proxyReplaceLogStorage   *storage.ProxyLogStorage
 )
+
+// 外部引用，防止手动和自动更换冲突 - proxyReplaceMutex 在 redis_handler.go 中定义
 
 func init() {
 	autoReplaceTaskRunning = false
@@ -188,6 +192,8 @@ func getDevicesAndProxies() (map[int64][]DeviceInfo, []ProxyInfo, error) {
 func replaceUnavailableProxies(unavailableProxies []ProxyStatus) {
 	// 为每一个不可用的代理寻找并执行替换
 	for _, failedProxy := range unavailableProxies {
+		// 使用互斥锁防止与手动更换冲突
+		ProxyReplaceMutex.Lock()
 		log.Printf("正在为代理 %d (IP: %s, 国家: %s) 寻找替代代理...",
 			failedProxy.ProxyInfo.ID, failedProxy.ProxyInfo.IP, failedProxy.ProxyInfo.CountryCode)
 
@@ -209,6 +215,7 @@ func replaceUnavailableProxies(unavailableProxies []ProxyStatus) {
 				"自动更换失败", fmt.Sprintf("查找替代代理失败: %v", err),
 				"system", "auto",
 			)
+			ProxyReplaceMutex.Unlock()
 			continue
 		}
 
@@ -223,6 +230,7 @@ func replaceUnavailableProxies(unavailableProxies []ProxyStatus) {
 				"自动更换失败", "未找到相同merchant_id和country_code下的可用替代代理",
 				"system", "auto",
 			)
+			ProxyReplaceMutex.Unlock()
 			continue
 		}
 
@@ -242,6 +250,7 @@ func replaceUnavailableProxies(unavailableProxies []ProxyStatus) {
 				"自动更换失败", fmt.Sprintf("获取设备列表失败: %v", err),
 				"system", "auto",
 			)
+			ProxyReplaceMutex.Unlock()
 			continue
 		}
 
@@ -256,6 +265,7 @@ func replaceUnavailableProxies(unavailableProxies []ProxyStatus) {
 				"自动更换成功（无设备使用）", "",
 				"system", "auto",
 			)
+			ProxyReplaceMutex.Unlock()
 			continue
 		}
 
@@ -287,5 +297,12 @@ func replaceUnavailableProxies(unavailableProxies []ProxyStatus) {
 			reason, errorMsg,
 			"system", "auto",
 		)
+		
+		// 清除相关代理的缓存
+		invalidateProxyCache(failedProxy.ProxyInfo.ID)
+		invalidateProxyCache(replacement.ID)
+		
+		// 释放锁
+		ProxyReplaceMutex.Unlock()
 	}
 }

@@ -12,7 +12,6 @@ import {
   Statistic,
   Descriptions,
   Alert,
-  Tooltip,
   Popconfirm,
   Badge,
   Typography,
@@ -27,7 +26,6 @@ import {
   ExclamationCircleOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
-  ClockCircleOutlined,
   EyeOutlined,
   GlobalOutlined,
   DesktopOutlined,
@@ -50,7 +48,7 @@ const { Text } = Typography;
 const ProxyMonitor: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [notifying, setNotifying] = useState(false);
-  const [replacing, setReplacing] = useState(false);
+  const [replacingProxyIds, setReplacingProxyIds] = useState<Set<number>>(new Set());
   const [data, setData] = useState<{
     totalProxies: number;
     unavailableCount: number;
@@ -89,8 +87,10 @@ const ProxyMonitor: React.FC = () => {
       const result = await fetchProxyStatus(true, forceRefresh);
       if (result.success) {
         setData(result);
-        if (result.cached) {
-          message.info(`已加载缓存数据 (缓存时间: ${new Date(result.cacheTime).toLocaleString()})`);
+        if (result.cached && !forceRefresh) {
+          message.info(`已加载缓存数据 (缓存时间: ${new Date(result.cacheTime || '').toLocaleString()})`);
+        } else if (!result.cached && !forceRefresh) {
+          message.warning('缓存数据为空，建议点击"全量刷新"获取最新数据');
         }
         // 清空选中项，因为数据已刷新
         setSelectedRowKeys([]);
@@ -221,7 +221,12 @@ const ProxyMonitor: React.FC = () => {
   };
 
   const handleReplaceProxy = async (proxyId: number) => {
-    setReplacing(true);
+    // 设置当前代理为加载中
+    setReplacingProxyIds(prev => {
+      const next = new Set(prev);
+      next.add(proxyId);
+      return next;
+    });
     try {
       // 首先查找替代代理
       const replacementResult = await findReplacementProxy(proxyId);
@@ -260,23 +265,39 @@ const ProxyMonitor: React.FC = () => {
               proxyId,
               replacementResult.replacementProxy.id,
             );
-            if (replaceResult.success) {
+            if (replaceResult.success && replaceResult.updatedDevices > 0) {
               message.success(
                 `代理更换成功，共更新 ${replaceResult.updatedDevices} 个设备`,
               );
               fetchData(); // 刷新数据
+            } else if (replaceResult.success && replaceResult.updatedDevices === 0) {
+              message.error("代理更换失败：没有设备被更新，可能是没有设备使用该代理或更新过程中发生错误");
             } else {
-              message.error("代理更换失败: " + replaceResult.error);
+              const errorMsg = replaceResult.error || replaceResult.message || "未知错误";
+              message.error("代理更换失败: " + errorMsg);
             }
           } catch (error: any) {
             message.error("代理更换失败: " + error.message);
           }
         },
+        onCancel: () => {
+          // 取消时也要移除loading状态
+          setReplacingProxyIds(prev => {
+            const next = new Set(prev);
+            next.delete(proxyId);
+            return next;
+          });
+        }
       });
     } catch (error: any) {
       message.error("查找替代代理失败: " + error.message);
     } finally {
-      setReplacing(false);
+      // 移除当前代理的loading状态
+      setReplacingProxyIds(prev => {
+        const next = new Set(prev);
+        next.delete(proxyId);
+        return next;
+      });
     }
   };
 
@@ -416,7 +437,7 @@ const ProxyMonitor: React.FC = () => {
               size="small"
               icon={<SwapOutlined />}
               onClick={() => handleReplaceProxy(record.proxy_info.id)}
-              loading={replacing}
+              loading={replacingProxyIds.has(record.proxy_info.id)}
               style={{ color: "#1890ff" }}
             >
               更换
@@ -429,9 +450,6 @@ const ProxyMonitor: React.FC = () => {
 
   useEffect(() => {
     fetchData();
-    // 自动刷新：每30秒检查一次代理状态
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
   }, []);
 
   return (
@@ -449,7 +467,7 @@ const ProxyMonitor: React.FC = () => {
             onClick={() => fetchData(false)}
             loading={loading}
           >
-            快速刷新
+            刷新缓存
           </Button>
           <Button
             icon={<ReloadOutlined />}
@@ -457,7 +475,7 @@ const ProxyMonitor: React.FC = () => {
             loading={loading}
             type="primary"
           >
-            强制刷新
+            全量刷新
           </Button>
           <Button
             icon={<CheckCircleOutlined />}
@@ -633,9 +651,12 @@ const ProxyMonitor: React.FC = () => {
           {data.cached && (
             <Alert
               message="正在显示缓存数据"
-              description={`缓存时间: ${new Date(data.cacheTime || '').toLocaleString()}。点击"强制刷新"或"后台全量检测"获取最新数据。`}
+              description={`缓存时间: ${new Date(data.cacheTime || '').toLocaleString()}。点击"全量刷新"获取最新数据，或使用"后台全量检测"进行完整检测。`}
               type="info"
               showIcon
+              action={[
+                <Button key="refresh" size="small" type="primary" onClick={() => fetchData(true)}>全量刷新</Button>
+              ]}
               style={{ marginBottom: 16 }}
             />
           )}

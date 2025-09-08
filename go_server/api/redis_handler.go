@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os/exec"
 	"strconv"
@@ -606,6 +607,7 @@ var (
 	cacheTimestamp     = time.Time{}
 	cacheMutex         sync.RWMutex
 	cacheValidDuration = 5 * time.Minute // 缓存有效期5分钟
+	ProxyReplaceMutex  sync.Mutex        // 防止手动和自动更换冲突
 )
 
 // GetProxyStatusHandler 获取代理状态监控信息
@@ -645,6 +647,7 @@ func GetProxyStatusHandler(c *gin.Context) {
 			"timestamp":        time.Now().UTC().Format(time.RFC3339),
 			"cached":           true,
 			"cacheTime":        cacheTimestamp.Format(time.RFC3339),
+			"note":             "缓存数据可能基于不同的查询模式生成",
 		})
 		return
 	}
@@ -671,25 +674,69 @@ func GetProxyStatusHandler(c *gin.Context) {
 		})
 		return
 	}
-	// 获取所有使用代理的设备
-	aiBoxDevices, err := getAIBoxDevicesWithProxy()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"error":   "Failed to fetch AI box devices",
-			"message": err.Error(),
-		})
-		return
-	}
+	// 根据参数选择获取设备的方式
+	onlineOnly := c.Query("online_only") != "false" // 默认为true，只获取在线账号的设备
 
-	cloudDevices, err := getCloudDevicesWithProxy()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"error":   "Failed to fetch cloud devices",
-			"message": err.Error(),
-		})
-		return
+	var aiBoxDevices []struct {
+		ID         int64  `gorm:"column:id"`
+		DevCode    string `gorm:"column:dev_code"`
+		DevText    string `gorm:"column:dev_text"`
+		IsOnline   int8   `gorm:"column:is_online"`
+		ProxyID    int64  `gorm:"column:proxy_id"`
+		MerchantID int64  `gorm:"column:merchant_id"`
+	}
+	var cloudDevices []struct {
+		ID         int64  `gorm:"column:id"`
+		DevCode    string `gorm:"column:dev_code"`
+		DevText    string `gorm:"column:dev_text"`
+		IsOnline   int    `gorm:"column:is_online"`
+		ProxyID    int64  `gorm:"column:proxy_id"`
+		MerchantID int64  `gorm:"column:merchant_id"`
+	}
+	var err error
+
+	if onlineOnly {
+		// 只获取在线账号关联的设备
+		aiBoxDevices, err = getAIBoxDevicesWithProxy()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"success": false,
+				"error":   "Failed to fetch AI box devices",
+				"message": err.Error(),
+			})
+			return
+		}
+
+		cloudDevices, err = getCloudDevicesWithProxy()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"success": false,
+				"error":   "Failed to fetch cloud devices",
+				"message": err.Error(),
+			})
+			return
+		}
+	} else {
+		// 获取所有使用代理的设备
+		aiBoxDevices, err = getAllAIBoxDevicesWithProxy()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"success": false,
+				"error":   "Failed to fetch AI box devices",
+				"message": err.Error(),
+			})
+			return
+		}
+
+		cloudDevices, err = getAllCloudDevicesWithProxy()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"success": false,
+				"error":   "Failed to fetch cloud devices",
+				"message": err.Error(),
+			})
+			return
+		}
 	}
 
 	// 合并设备列表并按proxy_id分组
@@ -806,6 +853,11 @@ func GetProxyStatusHandler(c *gin.Context) {
 		"timestamp":        time.Now().UTC().Format(time.RFC3339),
 		"cached":           false,
 		"cacheTime":        cacheTimestamp.Format(time.RFC3339),
+		"onlineOnly":       onlineOnly,
+		"queryMode": map[string]string{
+			"true":  "仅显示有在线社媒账号的代理",
+			"false": "显示所有使用中的代理",
+		}[fmt.Sprintf("%t", onlineOnly)],
 	})
 }
 
@@ -830,7 +882,33 @@ func getAIBoxDevicesWithProxy() ([]struct {
 	err := db.G.Table("ai_box_device as abd").
 		Joins("INNER JOIN social_accounts as sa ON abd.dev_code = sa.dev_code").
 		Where("abd.proxy_id > 0 AND abd.deleted_at IS NULL AND sa.deleted_at IS NULL AND sa.online_status = 1").
-		Select("abd.id, abd.dev_code, abd.dev_text, abd.is_online, abd.proxy_id, abd.merchant_id").
+		Select("DISTINCT abd.id, abd.dev_code, abd.dev_text, abd.is_online, abd.proxy_id, abd.merchant_id").
+		Scan(&devices).Error
+
+	return devices, err
+}
+
+// 获取所有使用代理的AI盒子设备（不限制社媒账号状态）
+func getAllAIBoxDevicesWithProxy() ([]struct {
+	ID         int64  `gorm:"column:id"`
+	DevCode    string `gorm:"column:dev_code"`
+	DevText    string `gorm:"column:dev_text"`
+	IsOnline   int8   `gorm:"column:is_online"`
+	ProxyID    int64  `gorm:"column:proxy_id"`
+	MerchantID int64  `gorm:"column:merchant_id"`
+}, error) {
+	var devices []struct {
+		ID         int64  `gorm:"column:id"`
+		DevCode    string `gorm:"column:dev_code"`
+		DevText    string `gorm:"column:dev_text"`
+		IsOnline   int8   `gorm:"column:is_online"`
+		ProxyID    int64  `gorm:"column:proxy_id"`
+		MerchantID int64  `gorm:"column:merchant_id"`
+	}
+
+	err := db.G.Table("ai_box_device").
+		Where("proxy_id > 0 AND deleted_at IS NULL").
+		Select("id, dev_code, dev_text, is_online, proxy_id, merchant_id").
 		Scan(&devices).Error
 
 	return devices, err
@@ -857,7 +935,33 @@ func getCloudDevicesWithProxy() ([]struct {
 	err := db.G.Table("cloud_device as cd").
 		Joins("INNER JOIN social_accounts as sa ON cd.dev_code = sa.dev_code").
 		Where("cd.proxy_id > 0 AND cd.deleted_at IS NULL AND sa.deleted_at IS NULL AND sa.online_status = 1").
-		Select("cd.id, cd.dev_code, cd.dev_text, cd.is_online, cd.proxy_id, cd.merchant_id").
+		Select("DISTINCT cd.id, cd.dev_code, cd.dev_text, cd.is_online, cd.proxy_id, cd.merchant_id").
+		Scan(&devices).Error
+
+	return devices, err
+}
+
+// 获取所有使用代理的云设备（不限制社媒账号状态）
+func getAllCloudDevicesWithProxy() ([]struct {
+	ID         int64  `gorm:"column:id"`
+	DevCode    string `gorm:"column:dev_code"`
+	DevText    string `gorm:"column:dev_text"`
+	IsOnline   int    `gorm:"column:is_online"`
+	ProxyID    int64  `gorm:"column:proxy_id"`
+	MerchantID int64  `gorm:"column:merchant_id"`
+}, error) {
+	var devices []struct {
+		ID         int64  `gorm:"column:id"`
+		DevCode    string `gorm:"column:dev_code"`
+		DevText    string `gorm:"column:dev_text"`
+		IsOnline   int    `gorm:"column:is_online"`
+		ProxyID    int64  `gorm:"column:proxy_id"`
+		MerchantID int64  `gorm:"column:merchant_id"`
+	}
+
+	err := db.G.Table("cloud_device").
+		Where("proxy_id > 0 AND deleted_at IS NULL").
+		Select("id, dev_code, dev_text, is_online, proxy_id, merchant_id").
 		Scan(&devices).Error
 
 	return devices, err
@@ -1489,6 +1593,7 @@ func findAvailableReplacement(merchantID int64, excludeProxyID int64, contry_cod
 	err := db.G.Table("proxy").
 		Where("merchant_id = ? AND id != ? AND  deleted_at IS NULL", merchantID, excludeProxyID).
 		Where("country_code = ?", contry_code).
+		Where("status = ?", 0).
 		Scan(&proxies).Error
 	if err != nil {
 		return ProxyInfo{}, false, err
@@ -1517,6 +1622,10 @@ func ReplaceProxyHandler(c *gin.Context) {
 		return
 	}
 
+	// 添加操作锁，防止与自动更换冲突
+	ProxyReplaceMutex.Lock()
+	defer ProxyReplaceMutex.Unlock()
+
 	// 获取旧代理信息
 	var oldProxy ProxyInfo
 	err := db.G.Table("proxy").
@@ -1530,6 +1639,45 @@ func ReplaceProxyHandler(c *gin.Context) {
 		})
 		return
 	}
+
+	// 实时检查代理当前是否真的不可用，避免重复更换
+	log.Printf("手动更换请求: 检查代理 %d 的实时状态", req.OldProxyID)
+	isAvailable, responseTime, errorMsg, testURL := checkProxyAvailability(oldProxy)
+	if isAvailable {
+		// 记录检测结果，说明代理在更换时检测为可用
+		if logErr := LogProxyReplacement(
+			int(oldProxy.ID), 0, // 新代理ID为0表示未发生更换
+			int(oldProxy.MerchantID), 0,
+			oldProxy.IP, oldProxy.Port,
+			"", "", // 新代理信息为空
+			true, 0, // 标记为成功但影响0台设备
+			"检测发现代理可用，取消更换",
+			fmt.Sprintf("实时检测显示代理可用，响应时间: %dms", responseTime),
+			"system", "manual",
+		); logErr != nil {
+			log.Printf("Failed to log proxy check result: %v", logErr)
+		}
+
+		log.Printf("代理 %d 检测结果：可用，响应时间: %dms，无需更换", req.OldProxyID, responseTime)
+
+		c.JSON(http.StatusOK, gin.H{
+			"success":       true,
+			"replaced":      false, // 明确标识未发生更换
+			"message":       "代理实时检测显示可用，已取消更换",
+			"proxyStatus":   "available",
+			"responseTime":  responseTime,
+			"testURL":       testURL,
+			"oldProxyID":    req.OldProxyID,
+			"operationType": "check_cancelled", // 操作类型：检测后取消
+			"timestamp":     time.Now().UTC().Format(time.RFC3339),
+		})
+		return
+	}
+
+	log.Printf("确认代理 %d 不可用，继续更换流程。错误: %s", req.OldProxyID, errorMsg)
+
+	// 清除相关缓存，确保数据同步
+	invalidateProxyCache(req.OldProxyID)
 
 	// 验证新代理存在且可用
 	var newProxy ProxyInfo
@@ -1546,7 +1694,7 @@ func ReplaceProxyHandler(c *gin.Context) {
 	}
 
 	// 检查新代理是否可用
-	isAvailable, _, errorMsg, _ := checkProxyAvailability(newProxy)
+	isAvailable, _, errorMsg, _ = checkProxyAvailability(newProxy)
 	if !isAvailable {
 		// 记录更换失败的日志
 		if logErr := LogProxyReplacement(
@@ -1613,10 +1761,13 @@ func ReplaceProxyHandler(c *gin.Context) {
 
 		c.JSON(http.StatusOK, gin.H{
 			"success":        true,
+			"replaced":       true, // 标识发生了更换，即使没有设备使用
 			"message":        "代理更换成功（无设备使用该代理）",
 			"updatedDevices": 0,
+			"device_count":   0,
 			"oldProxyID":     req.OldProxyID,
 			"newProxyID":     req.NewProxyID,
+			"operationType":  "replaced_no_devices", // 操作类型：已更换但无设备
 			"timestamp":      time.Now().UTC().Format(time.RFC3339),
 		})
 		return
@@ -1667,14 +1818,20 @@ func ReplaceProxyHandler(c *gin.Context) {
 		fmt.Printf("Failed to log proxy replacement: %v\n", logErr)
 	}
 
+	// 清除相关代理的缓存，确保前端显示最新状态
+	invalidateProxyCache(req.OldProxyID)
+	invalidateProxyCache(req.NewProxyID)
+
 	c.JSON(http.StatusOK, gin.H{
 		"success":        true,
+		"replaced":       true, // 明确标识发生了更换
 		"message":        "代理更换完成",
 		"updatedDevices": successCount,
 		"failedDevices":  failureCount,
-		"totalDevices":   totalCount,
+		"device_count":   totalCount,
 		"oldProxyID":     req.OldProxyID,
 		"newProxyID":     req.NewProxyID,
+		"operationType":  "replaced", // 操作类型：已更换
 		"timestamp":      time.Now().UTC().Format(time.RFC3339),
 	})
 }
@@ -1787,8 +1944,8 @@ func performAsyncProxyCheck(taskID string, task *AsyncCheckStatus) {
 		}
 	}()
 
-	// 获取所有使用代理的设备
-	aiBoxDevices, err := getAIBoxDevicesWithProxy()
+	// 获取所有使用代理的设备（包括所有状态的设备，保持与更换功能一致）
+	aiBoxDevices, err := getAllAIBoxDevicesWithProxy()
 	if err != nil {
 		taskMutex.Lock()
 		task.Status = "failed"
@@ -1799,7 +1956,7 @@ func performAsyncProxyCheck(taskID string, task *AsyncCheckStatus) {
 		return
 	}
 
-	cloudDevices, err := getCloudDevicesWithProxy()
+	cloudDevices, err := getAllCloudDevicesWithProxy()
 	if err != nil {
 		taskMutex.Lock()
 		task.Status = "failed"
@@ -2046,4 +2203,25 @@ func callSetProxyAPI(aiBoxDevices, cloudDevices []DeviceForProxy, newProxyID int
 	}
 
 	return len(allDevices), 0, nil
+}
+
+// invalidateProxyCache 清除指定代理的缓存
+func invalidateProxyCache(proxyID int64) {
+	cacheMutex.Lock()
+	defer cacheMutex.Unlock()
+
+	if _, exists := proxyStatusCache[proxyID]; exists {
+		delete(proxyStatusCache, proxyID)
+		log.Printf("已清除代理 %d 的缓存", proxyID)
+	}
+}
+
+// invalidateAllProxyCache 清除所有代理缓存
+func invalidateAllProxyCache() {
+	cacheMutex.Lock()
+	defer cacheMutex.Unlock()
+
+	proxyStatusCache = make(map[int64]ProxyStatus)
+	cacheTimestamp = time.Time{}
+	log.Printf("已清除所有代理状态缓存")
 }
