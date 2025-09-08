@@ -1164,8 +1164,14 @@ func GetOnlineCloudAccountsHandler(c *gin.Context) {
 			continue
 		}
 
-		// 4. 检查bdClientNo格式：必须是云机格式（VXLA开头）
-		if !strings.HasPrefix(userInfo.BdClientNo, "VXLA") {
+		// 4. 检查bdClientNo格式：云机格式为大写字母开头+数字，盒子格式为小写字母开头+数字
+		if len(userInfo.BdClientNo) == 0 {
+			continue
+		}
+		
+		// 检查第一个字符是否为大写字母（云机特征）
+		firstChar := userInfo.BdClientNo[0]
+		if !(firstChar >= 'A' && firstChar <= 'Z') {
 			continue
 		}
 
