@@ -13,190 +13,114 @@ import {
   Alert,
   Input,
   Select,
-  Timeline,
-  Progress,
   Descriptions,
   Tabs,
-  Badge,
-  Tooltip
+  Form,
+  Badge
 } from 'antd';
 import { 
   RocketOutlined,
   PlayCircleOutlined,
-  PauseCircleOutlined,
-  ReloadOutlined,
-  BranchesOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
   ClockCircleOutlined,
   EyeOutlined,
-  SettingOutlined,
+  ReloadOutlined,
   CodeOutlined,
   DeploymentUnitOutlined,
   SearchOutlined,
-  HistoryOutlined
+  HistoryOutlined,
+  CloudUploadOutlined,
+  ArrowUpOutlined,
+  PauseCircleOutlined
 } from '@ant-design/icons';
+import api from '../services/api';
 
 const { TabPane } = Tabs;
 
-// Mock data types
-interface Pipeline {
-  id: string;
-  name: string;
-  service: string;
-  branch: string;
-  status: 'running' | 'success' | 'failed' | 'pending' | 'cancelled';
-  progress: number;
-  startTime: string;
-  duration: string;
-  commitId: string;
-  commitMessage: string;
-  author: string;
-  stages: PipelineStage[];
-}
-
-interface PipelineStage {
-  name: string;
-  status: 'running' | 'success' | 'failed' | 'pending' | 'skipped';
-  startTime?: string;
-  duration?: string;
-  logs?: string;
-}
-
+// API data types matching backend models
 interface Deployment {
-  id: string;
-  service: string;
+  id: number;
+  serviceName: string;
+  environment: 'test' | 'production';
   version: string;
-  environment: 'dev' | 'staging' | 'prod';
-  status: 'deploying' | 'deployed' | 'failed' | 'rolled-back';
-  deployTime: string;
+  commitHash: string;
+  commitMessage?: string;
+  branch: string;
+  status: 'pending' | 'running' | 'success' | 'failed' | 'rollback' | 'cancelled';
+  startTime: string;
+  endTime?: string;
+  duration?: number;
   deployedBy: string;
+  buildLog?: string;
+  errorMessage?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface ServiceEnvironment {
+  id: number;
+  serviceName: string;
+  environment: 'test' | 'production';
+  currentVersion?: string;
+  currentCommit?: string;
+  deploymentId?: number;
+  lastDeployedAt?: string;
+  isHealthy: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 const CICDManager: React.FC = () => {
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('pipelines');
-  const [pipelineData, setPipelineData] = useState<Pipeline[]>([]);
+  const [activeTab, setActiveTab] = useState('deployments');
   const [deploymentData, setDeploymentData] = useState<Deployment[]>([]);
-  const [selectedPipeline, setSelectedPipeline] = useState<Pipeline | null>(null);
-  const [pipelineDetailVisible, setPipelineDetailVisible] = useState(false);
+  const [serviceEnvironments, setServiceEnvironments] = useState<ServiceEnvironment[]>([]);
+  const [selectedDeployment, setSelectedDeployment] = useState<Deployment | null>(null);
+  const [deploymentDetailVisible, setDeploymentDetailVisible] = useState(false);
+  const [deployModalVisible, setDeployModalVisible] = useState(false);
+  const [promoteModalVisible, setPromoteModalVisible] = useState(false);
+  const [form] = Form.useForm();
   
   // 搜索和筛选状态
   const [searchService, setSearchService] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [pageSize, setPageSize] = useState<number>(20);
-  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [environmentFilter, setEnvironmentFilter] = useState<string>('all');
 
-  // Mock data
+  // Load data from API
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      // Load deployment history
+      const deploymentRes = await api.get('/api/cicd/deployments?limit=100');
+      setDeploymentData(deploymentRes.data.deployments || []);
+      
+      // Load service environments
+      const envRes = await api.get('/api/cicd/environments');
+      setServiceEnvironments(envRes.data.environments || []);
+      
+    } catch (error) {
+      console.error('Failed to load CI/CD data:', error);
+      message.error('加载CI/CD数据失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const mockPipelines: Pipeline[] = [
-      {
-        id: 'pipe-001',
-        name: 'user-service-build',
-        service: 'user-service',
-        branch: 'main',
-        status: 'running',
-        progress: 65,
-        startTime: '2024-01-15 14:30:00',
-        duration: '5m 23s',
-        commitId: 'a1b2c3d',
-        commitMessage: 'feat: add user authentication',
-        author: 'developer',
-        stages: [
-          { name: 'Code Checkout', status: 'success', startTime: '14:30:00', duration: '12s' },
-          { name: 'Build', status: 'success', startTime: '14:30:12', duration: '2m 15s' },
-          { name: 'Test', status: 'running', startTime: '14:32:27', duration: '1m 30s' },
-          { name: 'Package', status: 'pending' },
-          { name: 'Deploy', status: 'pending' }
-        ]
-      },
-      {
-        id: 'pipe-002',
-        name: 'api-gateway-build',
-        service: 'api-gateway',
-        branch: 'develop',
-        status: 'success',
-        progress: 100,
-        startTime: '2024-01-15 14:25:00',
-        duration: '4m 45s',
-        commitId: 'e4f5g6h',
-        commitMessage: 'fix: rate limiting issue',
-        author: 'developer2',
-        stages: [
-          { name: 'Code Checkout', status: 'success', startTime: '14:25:00', duration: '8s' },
-          { name: 'Build', status: 'success', startTime: '14:25:08', duration: '1m 45s' },
-          { name: 'Test', status: 'success', startTime: '14:26:53', duration: '2m 15s' },
-          { name: 'Package', status: 'success', startTime: '14:29:08', duration: '25s' },
-          { name: 'Deploy', status: 'success', startTime: '14:29:33', duration: '12s' }
-        ]
-      },
-      {
-        id: 'pipe-003',
-        name: 'order-service-build',
-        service: 'order-service',
-        branch: 'feature/payment',
-        status: 'failed',
-        progress: 30,
-        startTime: '2024-01-15 14:20:00',
-        duration: '2m 18s',
-        commitId: 'i7j8k9l',
-        commitMessage: 'feat: implement payment integration',
-        author: 'developer3',
-        stages: [
-          { name: 'Code Checkout', status: 'success', startTime: '14:20:00', duration: '10s' },
-          { name: 'Build', status: 'failed', startTime: '14:20:10', duration: '2m 08s' },
-          { name: 'Test', status: 'skipped' },
-          { name: 'Package', status: 'skipped' },
-          { name: 'Deploy', status: 'skipped' }
-        ]
-      }
-    ];
-
-    const mockDeployments: Deployment[] = [
-      {
-        id: 'deploy-001',
-        service: 'user-service',
-        version: 'v1.2.3',
-        environment: 'prod',
-        status: 'deployed',
-        deployTime: '2024-01-15 14:00:00',
-        deployedBy: 'admin'
-      },
-      {
-        id: 'deploy-002',
-        service: 'api-gateway',
-        version: 'v2.1.0',
-        environment: 'staging',
-        status: 'deploying',
-        deployTime: '2024-01-15 14:30:00',
-        deployedBy: 'developer'
-      },
-      {
-        id: 'deploy-003',
-        service: 'order-service',
-        version: 'v1.1.5',
-        environment: 'dev',
-        status: 'failed',
-        deployTime: '2024-01-15 13:45:00',
-        deployedBy: 'developer2'
-      }
-    ];
-
-    setPipelineData(mockPipelines);
-    setDeploymentData(mockDeployments);
+    loadData();
+    // 每30秒刷新一次数据
+    const interval = setInterval(loadData, 30000);
+    return () => clearInterval(interval);
   }, []);
 
-  const getStatusTag = (status: string, isDeployment = false) => {
-    const configs: { [key: string]: { color: string; icon: React.ReactNode; text: string } } = isDeployment ? {
-      deploying: { color: 'processing', icon: <ClockCircleOutlined />, text: '部署中' },
-      deployed: { color: 'success', icon: <CheckCircleOutlined />, text: '已部署' },
-      failed: { color: 'error', icon: <CloseCircleOutlined />, text: '失败' },
-      'rolled-back': { color: 'warning', icon: <HistoryOutlined />, text: '已回滚' }
-    } : {
-      running: { color: 'processing', icon: <PlayCircleOutlined />, text: '运行中' },
+  const getStatusTag = (status: string) => {
+    const configs: { [key: string]: { color: string; icon: React.ReactNode; text: string } } = {
+      pending: { color: 'default', icon: <ClockCircleOutlined />, text: '等待中' },
+      running: { color: 'processing', icon: <PlayCircleOutlined />, text: '部署中' },
       success: { color: 'success', icon: <CheckCircleOutlined />, text: '成功' },
       failed: { color: 'error', icon: <CloseCircleOutlined />, text: '失败' },
-      pending: { color: 'default', icon: <ClockCircleOutlined />, text: '等待中' },
+      rollback: { color: 'warning', icon: <HistoryOutlined />, text: '回滚' },
       cancelled: { color: 'warning', icon: <PauseCircleOutlined />, text: '已取消' }
     };
     
@@ -210,72 +134,111 @@ const CICDManager: React.FC = () => {
 
   const getEnvironmentTag = (env: string) => {
     const configs: { [key: string]: { color: string; text: string } } = {
-      dev: { color: 'blue', text: '开发环境' },
-      staging: { color: 'orange', text: '测试环境' },
-      prod: { color: 'red', text: '生产环境' }
+      test: { color: 'orange', text: '测试环境' },
+      production: { color: 'red', text: '生产环境' }
     };
     const config = configs[env] || { color: 'default', text: env };
     return <Tag color={config.color}>{config.text}</Tag>;
   };
 
-  const showPipelineDetail = (pipeline: Pipeline) => {
-    setSelectedPipeline(pipeline);
-    setPipelineDetailVisible(true);
+  // 部署到测试环境
+  const deployToTest = async (values: any) => {
+    try {
+      const request = {
+        serviceName: values.serviceName,
+        environment: 'test',
+        branch: values.branch || 'test',
+        commitHash: values.commitHash,
+        deployedBy: 'admin',
+        force: values.force || false
+      };
+      
+      await api.post('/api/cicd/deploy/test', request);
+      message.success('测试环境部署已启动');
+      setDeployModalVisible(false);
+      form.resetFields();
+      loadData();
+    } catch (error: any) {
+      message.error(error.response?.data?.error || '部署失败');
+    }
+  };
+
+  // 提升到生产环境
+  const promoteToProduction = async (values: any) => {
+    try {
+      const request = {
+        serviceName: values.serviceName,
+        version: values.version,
+        commitHash: values.commitHash,
+        promotedBy: 'admin'
+      };
+      
+      await api.post('/api/cicd/promote', request);
+      message.success('生产环境提升已启动');
+      setPromoteModalVisible(false);
+      form.resetFields();
+      loadData();
+    } catch (error: any) {
+      message.error(error.response?.data?.error || '提升失败');
+    }
+  };
+
+  const showDeploymentDetail = (deployment: Deployment) => {
+    setSelectedDeployment(deployment);
+    setDeploymentDetailVisible(true);
   };
 
   // 过滤数据
-  const filteredPipelines = useMemo(() => {
-    return pipelineData.filter(item => {
-      const serviceMatch = !searchService || item.service.toLowerCase().includes(searchService.toLowerCase());
+  const filteredDeployments = useMemo(() => {
+    return deploymentData.filter(item => {
+      const serviceMatch = !searchService || item.serviceName.toLowerCase().includes(searchService.toLowerCase());
       const statusMatch = statusFilter === 'all' || item.status === statusFilter;
-      return serviceMatch && statusMatch;
+      const envMatch = environmentFilter === 'all' || item.environment === environmentFilter;
+      return serviceMatch && statusMatch && envMatch;
     });
-  }, [pipelineData, searchService, statusFilter]);
+  }, [deploymentData, searchService, statusFilter, environmentFilter]);
 
-  const pipelineColumns = [
+  const deploymentColumns = [
     {
-      title: '流水线名称',
-      key: 'name',
-      width: 200,
-      render: (record: Pipeline) => (
-        <div>
-          <div><strong>{record.name}</strong></div>
-          <div style={{ color: '#888', fontSize: '12px' }}>
-            <BranchesOutlined /> {record.branch}
-          </div>
-        </div>
-      ),
+      title: '服务名称',
+      dataIndex: 'serviceName',
+      key: 'serviceName',
+      width: 150,
     },
     {
-      title: '服务',
-      dataIndex: 'service',
-      key: 'service',
+      title: '环境',
+      key: 'environment',
+      width: 100,
+      render: (record: Deployment) => getEnvironmentTag(record.environment),
+    },
+    {
+      title: '版本',
+      dataIndex: 'version',
+      key: 'version',
       width: 120,
+      render: (version: string) => version || '-',
+    },
+    {
+      title: '分支',
+      dataIndex: 'branch',
+      key: 'branch',
+      width: 100,
     },
     {
       title: '状态',
       key: 'status',
-      width: 120,
-      render: (record: Pipeline) => (
-        <div>
-          {getStatusTag(record.status)}
-          {record.status === 'running' && (
-            <div style={{ marginTop: 4 }}>
-              <Progress percent={record.progress} size="small" />
-            </div>
-          )}
-        </div>
-      ),
+      width: 100,
+      render: (record: Deployment) => getStatusTag(record.status),
     },
     {
       title: '提交信息',
       key: 'commit',
-      width: 300,
-      render: (record: Pipeline) => (
+      width: 250,
+      render: (record: Deployment) => (
         <div>
-          <div>{record.commitMessage}</div>
+          <div>{record.commitMessage || '无提交信息'}</div>
           <div style={{ color: '#888', fontSize: '12px' }}>
-            <CodeOutlined /> {record.commitId} · {record.author}
+            <CodeOutlined /> {record.commitHash?.substring(0, 8)}
           </div>
         </div>
       ),
@@ -285,62 +248,18 @@ const CICDManager: React.FC = () => {
       dataIndex: 'startTime',
       key: 'startTime',
       width: 150,
+      render: (time: string) => new Date(time).toLocaleString(),
     },
     {
-      title: '持续时间',
-      dataIndex: 'duration',
+      title: '耗时',
       key: 'duration',
-      width: 100,
-    },
-    {
-      title: '操作',
-      key: 'action',
-      width: 120,
-      render: (record: Pipeline) => (
-        <Space>
-          <Button 
-            type="link" 
-            size="small" 
-            icon={<EyeOutlined />}
-            onClick={() => showPipelineDetail(record)}
-          >
-            详情
-          </Button>
-        </Space>
-      ),
-    },
-  ];
-
-  const deploymentColumns = [
-    {
-      title: '服务',
-      dataIndex: 'service',
-      key: 'service',
-      width: 150,
-    },
-    {
-      title: '版本',
-      dataIndex: 'version',
-      key: 'version',
-      width: 120,
-    },
-    {
-      title: '环境',
-      key: 'environment',
-      width: 120,
-      render: (record: Deployment) => getEnvironmentTag(record.environment),
-    },
-    {
-      title: '状态',
-      key: 'status',
-      width: 120,
-      render: (record: Deployment) => getStatusTag(record.status, true),
-    },
-    {
-      title: '部署时间',
-      dataIndex: 'deployTime',
-      key: 'deployTime',
-      width: 150,
+      width: 80,
+      render: (record: Deployment) => {
+        if (record.duration) {
+          return `${Math.floor(record.duration / 60)}m${record.duration % 60}s`;
+        }
+        return '-';
+      },
     },
     {
       title: '部署者',
@@ -354,48 +273,103 @@ const CICDManager: React.FC = () => {
       width: 120,
       render: (record: Deployment) => (
         <Space>
-          <Button type="link" size="small">日志</Button>
-          {record.status === 'deployed' && (
-            <Button type="link" size="small" danger>回滚</Button>
+          <Button 
+            type="link" 
+            size="small" 
+            icon={<EyeOutlined />}
+            onClick={() => showDeploymentDetail(record)}
+          >
+            详情
+          </Button>
+        </Space>
+      ),
+    },
+  ];
+
+  const environmentColumns = [
+    {
+      title: '服务名称',
+      dataIndex: 'serviceName',
+      key: 'serviceName',
+      width: 150,
+    },
+    {
+      title: '环境',
+      key: 'environment',
+      width: 100,
+      render: (record: ServiceEnvironment) => getEnvironmentTag(record.environment),
+    },
+    {
+      title: '当前版本',
+      dataIndex: 'currentVersion',
+      key: 'currentVersion',
+      width: 120,
+      render: (version: string) => version || '-',
+    },
+    {
+      title: '当前提交',
+      key: 'currentCommit',
+      width: 120,
+      render: (record: ServiceEnvironment) => (
+        record.currentCommit ? 
+        <><CodeOutlined /> {record.currentCommit.substring(0, 8)}</> : 
+        '-'
+      ),
+    },
+    {
+      title: '健康状态',
+      key: 'isHealthy',
+      width: 100,
+      render: (record: ServiceEnvironment) => (
+        <Badge 
+          status={record.isHealthy ? 'success' : 'error'} 
+          text={record.isHealthy ? '健康' : '异常'} 
+        />
+      ),
+    },
+    {
+      title: '最后部署时间',
+      dataIndex: 'lastDeployedAt',
+      key: 'lastDeployedAt',
+      width: 150,
+      render: (time: string) => time ? new Date(time).toLocaleString() : '-',
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 200,
+      render: (record: ServiceEnvironment) => (
+        <Space>
+          {record.environment === 'test' ? (
+            <Button 
+              type="primary" 
+              size="small" 
+              icon={<ArrowUpOutlined />}
+              onClick={() => {
+                form.setFieldsValue({
+                  serviceName: record.serviceName,
+                  version: record.currentVersion,
+                  commitHash: record.currentCommit
+                });
+                setPromoteModalVisible(true);
+              }}
+              disabled={!record.isHealthy || !record.currentVersion}
+            >
+              提升到生产
+            </Button>
+          ) : (
+            <Button type="link" size="small">
+              回滚
+            </Button>
           )}
         </Space>
       ),
     },
   ];
 
-  const renderPipelineStages = (stages: PipelineStage[]) => {
-    return (
-      <Timeline>
-        {stages.map((stage, index) => (
-          <Timeline.Item
-            key={index}
-            color={stage.status === 'success' ? 'green' : 
-                   stage.status === 'failed' ? 'red' :
-                   stage.status === 'running' ? 'blue' :
-                   stage.status === 'skipped' ? 'gray' : 'gray'}
-            dot={stage.status === 'running' ? <ClockCircleOutlined className="timeline-clock-icon" /> : null}
-          >
-            <div>
-              <strong>{stage.name}</strong>
-              <span style={{ marginLeft: 8 }}>
-                {getStatusTag(stage.status)}
-              </span>
-            </div>
-            {stage.startTime && (
-              <div style={{ color: '#888', fontSize: '12px' }}>
-                开始时间: {stage.startTime}
-                {stage.duration && ` · 耗时: ${stage.duration}`}
-              </div>
-            )}
-          </Timeline.Item>
-        ))}
-      </Timeline>
-    );
-  };
-
-  const runningPipelines = pipelineData.filter(p => p.status === 'running').length;
-  const successPipelines = pipelineData.filter(p => p.status === 'success').length;
-  const failedPipelines = pipelineData.filter(p => p.status === 'failed').length;
+  const runningDeployments = deploymentData.filter(d => d.status === 'running').length;
+  const successDeployments = deploymentData.filter(d => d.status === 'success').length;
+  const failedDeployments = deploymentData.filter(d => d.status === 'failed').length;
 
   return (
     <Card 
@@ -407,10 +381,16 @@ const CICDManager: React.FC = () => {
       }
       extra={
         <Space>
-          <Button icon={<SettingOutlined />}>配置</Button>
+          <Button 
+            type="primary"
+            icon={<CloudUploadOutlined />}
+            onClick={() => setDeployModalVisible(true)}
+          >
+            部署到测试
+          </Button>
           <Button 
             icon={<ReloadOutlined />} 
-            onClick={() => setLoading(!loading)}
+            onClick={loadData}
             loading={loading}
           >
             刷新
@@ -419,88 +399,59 @@ const CICDManager: React.FC = () => {
       }
     >
       <Tabs activeKey={activeTab} onChange={setActiveTab}>
-        <TabPane tab={<><RocketOutlined />流水线</>} key="pipelines">
+        <TabPane tab={<><DeploymentUnitOutlined />部署记录</>} key="deployments">
           {/* 搜索控件 */}
-          <Card size="small" style={{ marginBottom: 16 }}>
-            <Row gutter={16} align="middle">
-              <Col span={6}>
-                <Space direction="vertical" size="small" style={{ width: '100%' }}>
-                  <label>按服务搜索:</label>
-                  <Input
-                    placeholder="输入服务名称"
-                    prefix={<SearchOutlined />}
-                    value={searchService}
-                    onChange={(e) => {
-                      setSearchService(e.target.value);
-                      setCurrentPage(1);
-                    }}
-                    allowClear
-                  />
-                </Space>
-              </Col>
-              <Col span={6}>
-                <Space direction="vertical" size="small" style={{ width: '100%' }}>
-                  <label>状态筛选:</label>
-                  <Select
-                    style={{ width: '100%' }}
-                    value={statusFilter}
-                    onChange={(value) => {
-                      setStatusFilter(value);
-                      setCurrentPage(1);
-                    }}
-                  >
-                    <Select.Option value="all">全部状态</Select.Option>
-                    <Select.Option value="running">运行中</Select.Option>
-                    <Select.Option value="success">成功</Select.Option>
-                    <Select.Option value="failed">失败</Select.Option>
-                    <Select.Option value="pending">等待中</Select.Option>
-                  </Select>
-                </Space>
-              </Col>
-              <Col span={6}>
-                <Space direction="vertical" size="small" style={{ width: '100%' }}>
-                  <label>当前显示:</label>
-                  <div style={{ 
-                    padding: '6px 12px', 
-                    background: '#f5f5f5', 
-                    borderRadius: '6px',
-                    textAlign: 'center' 
-                  }}>
-                    <strong>{filteredPipelines.length}</strong> 个流水线
-                  </div>
-                </Space>
-              </Col>
-              <Col span={6}>
-                <Space direction="vertical" size="small" style={{ width: '100%' }}>
-                  <label>&nbsp;</label>
-                  <Button 
-                    onClick={() => {
-                      setSearchService('');
-                      setStatusFilter('all');
-                      setCurrentPage(1);
-                    }} 
-                    style={{ width: '100%' }}
-                  >
-                    重置筛选
-                  </Button>
-                </Space>
-              </Col>
-            </Row>
-          </Card>
+          <Row gutter={16} style={{ marginBottom: 16 }}>
+            <Col span={6}>
+              <Input
+                placeholder="搜索服务名称"
+                prefix={<SearchOutlined />}
+                value={searchService}
+                onChange={(e) => setSearchService(e.target.value)}
+                allowClear
+              />
+            </Col>
+            <Col span={4}>
+              <Select
+                style={{ width: '100%' }}
+                placeholder="状态筛选"
+                value={statusFilter}
+                onChange={setStatusFilter}
+              >
+                <Select.Option value="all">全部状态</Select.Option>
+                <Select.Option value="running">部署中</Select.Option>
+                <Select.Option value="success">成功</Select.Option>
+                <Select.Option value="failed">失败</Select.Option>
+                <Select.Option value="pending">等待中</Select.Option>
+              </Select>
+            </Col>
+            <Col span={4}>
+              <Select
+                style={{ width: '100%' }}
+                placeholder="环境筛选"
+                value={environmentFilter}
+                onChange={setEnvironmentFilter}
+              >
+                <Select.Option value="all">全部环境</Select.Option>
+                <Select.Option value="test">测试环境</Select.Option>
+                <Select.Option value="production">生产环境</Select.Option>
+              </Select>
+            </Col>
+          </Row>
 
           {/* 统计信息 */}
           <Row gutter={16} style={{ marginBottom: 16 }}>
             <Col span={6}>
               <Statistic 
-                title="总流水线" 
-                value={pipelineData.length} 
+                title="总部署" 
+                value={deploymentData.length} 
                 prefix={<RocketOutlined />}
               />
             </Col>
             <Col span={6}>
               <Statistic 
-                title="运行中" 
-                value={runningPipelines} 
+                title="部署中" 
+                value={runningDeployments} 
                 valueStyle={{ color: '#1890ff' }}
                 prefix={<PlayCircleOutlined />}
               />
@@ -508,7 +459,7 @@ const CICDManager: React.FC = () => {
             <Col span={6}>
               <Statistic 
                 title="成功" 
-                value={successPipelines} 
+                value={successDeployments} 
                 valueStyle={{ color: '#3f8600' }}
                 prefix={<CheckCircleOutlined />}
               />
@@ -516,17 +467,17 @@ const CICDManager: React.FC = () => {
             <Col span={6}>
               <Statistic 
                 title="失败" 
-                value={failedPipelines} 
+                value={failedDeployments} 
                 valueStyle={{ color: '#cf1322' }}
                 prefix={<CloseCircleOutlined />}
               />
             </Col>
           </Row>
 
-          {runningPipelines > 0 && (
+          {runningDeployments > 0 && (
             <Alert
-              message="有正在运行的流水线"
-              description={`当前有 ${runningPipelines} 个流水线正在执行中`}
+              message="有正在运行的部署"
+              description={`当前有 ${runningDeployments} 个部署正在执行中`}
               type="info"
               showIcon
               style={{ marginBottom: 16 }}
@@ -534,35 +485,8 @@ const CICDManager: React.FC = () => {
           )}
 
           <Table
-            columns={pipelineColumns}
-            dataSource={filteredPipelines}
-            rowKey="id"
-            loading={loading}
-            size="small"
-            pagination={{
-              current: currentPage,
-              pageSize: pageSize,
-              total: filteredPipelines.length,
-              showSizeChanger: true,
-              showQuickJumper: true,
-              pageSizeOptions: ['10', '20', '50'],
-              showTotal: (total, range) => 
-                `第 ${range[0]}-${range[1]} 条，共 ${total} 个流水线`,
-              onChange: (page, size) => {
-                setCurrentPage(page);
-                if (size !== pageSize) {
-                  setPageSize(size);
-                  setCurrentPage(1);
-                }
-              },
-            }}
-          />
-        </TabPane>
-
-        <TabPane tab={<><DeploymentUnitOutlined />部署记录</>} key="deployments">
-          <Table
             columns={deploymentColumns}
-            dataSource={deploymentData}
+            dataSource={filteredDeployments}
             rowKey="id"
             loading={loading}
             size="small"
@@ -575,58 +499,191 @@ const CICDManager: React.FC = () => {
             }}
           />
         </TabPane>
+
+        <TabPane tab="环境状态" key="environments">
+          <Table
+            columns={environmentColumns}
+            dataSource={serviceEnvironments}
+            rowKey="id"
+            loading={loading}
+            size="small"
+            pagination={{
+              pageSize: 20,
+              showSizeChanger: true,
+              showQuickJumper: true,
+              showTotal: (total, range) => 
+                `第 ${range[0]}-${range[1]} 条，共 ${total} 个环境`,
+            }}
+          />
+        </TabPane>
       </Tabs>
 
-      {/* 流水线详情模态框 */}
+      {/* 部署详情模态框 */}
       <Modal
-        title={`流水线详情 - ${selectedPipeline?.name}`}
-        open={pipelineDetailVisible}
-        onCancel={() => setPipelineDetailVisible(false)}
+        title={`部署详情 - ${selectedDeployment?.serviceName}`}
+        open={deploymentDetailVisible}
+        onCancel={() => setDeploymentDetailVisible(false)}
         footer={[
-          <Button key="close" onClick={() => setPipelineDetailVisible(false)}>
+          <Button key="close" onClick={() => setDeploymentDetailVisible(false)}>
             关闭
           </Button>
         ]}
         width={800}
       >
-        {selectedPipeline && (
+        {selectedDeployment && (
           <div>
             <Descriptions title="基本信息" bordered size="small" style={{ marginBottom: 16 }}>
-              <Descriptions.Item label="流水线名称">
-                {selectedPipeline.name}
+              <Descriptions.Item label="服务名称">
+                {selectedDeployment.serviceName}
               </Descriptions.Item>
-              <Descriptions.Item label="服务">
-                {selectedPipeline.service}
+              <Descriptions.Item label="环境">
+                {getEnvironmentTag(selectedDeployment.environment)}
+              </Descriptions.Item>
+              <Descriptions.Item label="版本">
+                {selectedDeployment.version || '-'}
               </Descriptions.Item>
               <Descriptions.Item label="分支">
-                <BranchesOutlined /> {selectedPipeline.branch}
+                {selectedDeployment.branch}
               </Descriptions.Item>
               <Descriptions.Item label="状态">
-                {getStatusTag(selectedPipeline.status)}
+                {getStatusTag(selectedDeployment.status)}
               </Descriptions.Item>
               <Descriptions.Item label="开始时间">
-                {selectedPipeline.startTime}
+                {new Date(selectedDeployment.startTime).toLocaleString()}
               </Descriptions.Item>
-              <Descriptions.Item label="持续时间">
-                {selectedPipeline.duration}
-              </Descriptions.Item>
-              <Descriptions.Item label="提交ID" span={2}>
-                <CodeOutlined /> {selectedPipeline.commitId}
+              <Descriptions.Item label="提交哈希" span={2}>
+                <CodeOutlined /> {selectedDeployment.commitHash}
               </Descriptions.Item>
               <Descriptions.Item label="提交信息" span={2}>
-                {selectedPipeline.commitMessage}
+                {selectedDeployment.commitMessage || '无提交信息'}
               </Descriptions.Item>
-              <Descriptions.Item label="作者">
-                {selectedPipeline.author}
+              <Descriptions.Item label="部署者">
+                {selectedDeployment.deployedBy}
               </Descriptions.Item>
             </Descriptions>
 
-            <div style={{ marginTop: 16 }}>
-              <h4>执行阶段</h4>
-              {renderPipelineStages(selectedPipeline.stages)}
-            </div>
+            {selectedDeployment.buildLog && (
+              <div style={{ marginTop: 16 }}>
+                <h4>构建日志</h4>
+                <pre style={{ 
+                  background: '#f5f5f5', 
+                  padding: '12px', 
+                  borderRadius: '4px',
+                  maxHeight: '300px',
+                  overflow: 'auto',
+                  fontSize: '12px'
+                }}>
+                  {selectedDeployment.buildLog}
+                </pre>
+              </div>
+            )}
+
+            {selectedDeployment.errorMessage && (
+              <div style={{ marginTop: 16 }}>
+                <Alert
+                  message="错误信息"
+                  description={selectedDeployment.errorMessage}
+                  type="error"
+                  showIcon
+                />
+              </div>
+            )}
           </div>
         )}
+      </Modal>
+
+      {/* 部署到测试环境模态框 */}
+      <Modal
+        title="部署到测试环境"
+        open={deployModalVisible}
+        onCancel={() => setDeployModalVisible(false)}
+        footer={null}
+      >
+        <Form form={form} onFinish={deployToTest} layout="vertical">
+          <Form.Item
+            label="服务名称"
+            name="serviceName"
+            rules={[{ required: true, message: '请输入服务名称' }]}
+          >
+            <Select placeholder="选择服务">
+              <Select.Option value="ims_server_web">ims_server_web</Select.Option>
+              <Select.Option value="ims_server_ws">ims_server_ws</Select.Option>
+              <Select.Option value="ims_server_mq">ims_server_mq</Select.Option>
+            </Select>
+          </Form.Item>
+          <Form.Item
+            label="分支"
+            name="branch"
+            rules={[{ required: true, message: '请输入分支名称' }]}
+          >
+            <Input placeholder="例如: test, develop" />
+          </Form.Item>
+          <Form.Item
+            label="提交哈希"
+            name="commitHash"
+          >
+            <Input placeholder="可选，留空则使用最新提交" />
+          </Form.Item>
+          <Form.Item>
+            <Space>
+              <Button type="primary" htmlType="submit">
+                开始部署
+              </Button>
+              <Button onClick={() => setDeployModalVisible(false)}>
+                取消
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 提升到生产环境模态框 */}
+      <Modal
+        title="提升到生产环境"
+        open={promoteModalVisible}
+        onCancel={() => setPromoteModalVisible(false)}
+        footer={null}
+      >
+        <Form form={form} onFinish={promoteToProduction} layout="vertical">
+          <Form.Item
+            label="服务名称"
+            name="serviceName"
+            rules={[{ required: true, message: '请输入服务名称' }]}
+          >
+            <Input disabled />
+          </Form.Item>
+          <Form.Item
+            label="版本"
+            name="version"
+            rules={[{ required: true, message: '请输入版本' }]}
+          >
+            <Input disabled />
+          </Form.Item>
+          <Form.Item
+            label="提交哈希"
+            name="commitHash"
+            rules={[{ required: true, message: '请输入提交哈希' }]}
+          >
+            <Input disabled />
+          </Form.Item>
+          <Alert
+            message="注意"
+            description="此操作将把测试环境验证通过的版本部署到生产环境，请确认测试通过后再执行。"
+            type="warning"
+            showIcon
+            style={{ marginBottom: 16 }}
+          />
+          <Form.Item>
+            <Space>
+              <Button type="primary" htmlType="submit" danger>
+                确认提升到生产
+              </Button>
+              <Button onClick={() => setPromoteModalVisible(false)}>
+                取消
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
       </Modal>
     </Card>
   );

@@ -1,6 +1,8 @@
 package api
 
 import (
+	"control/go_server/db"
+	"control/go_server/internal/storage"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -29,6 +31,11 @@ func SetupRouter() *gin.Engine {
 
 	// Session middleware
 	router.Use(SessionsMiddleware())
+
+	// Initialize CI/CD store
+	cicdStore := storage.NewCICDStore(db.G)
+	cicdStore.AutoMigrate()
+	cicdHandler := NewCICDHandler(cicdStore)
 
 	// API Routes
 	api := router.Group("/api")
@@ -92,6 +99,18 @@ func SetupRouter() *gin.Engine {
 					autoReplaceGroup.POST("/stop", StopAutoReplaceHandler)
 					autoReplaceGroup.GET("/status", GetAutoReplaceStatusHandler)
 				}
+			}
+
+			// CI/CD routes
+			cicdGroup := auth.Group("/cicd")
+			{
+				cicdGroup.GET("/deployments", cicdHandler.GetDeploymentHistory)
+				cicdGroup.GET("/environments", cicdHandler.GetServiceEnvironments)
+				cicdGroup.POST("/deploy/test", cicdHandler.DeployToTest)
+				cicdGroup.POST("/promote", cicdHandler.PromoteToProduction)
+				cicdGroup.POST("/rollback", cicdHandler.RollbackDeployment)
+				cicdGroup.GET("/deployments/:id/status", cicdHandler.GetDeploymentStatus)
+				cicdGroup.GET("/stats", cicdHandler.GetDeploymentStats)
 			}
 
 			// Pprof routes

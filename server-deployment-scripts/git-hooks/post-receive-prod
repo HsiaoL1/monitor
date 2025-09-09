@@ -1,0 +1,246 @@
+#!/bin/bash
+#
+# Git post-receive hook for production environment
+# This hook is triggered when code is pushed to production server repository
+# Requires production-ready tag for deployment
+#
+
+# Configuration
+DEPLOY_BASE="/opt/services-prod"
+BACKUP_BASE="/opt/backups"
+LOG_BASE="/opt/deployment-logs/prod"
+WEBHOOK_URL="http://monitor-server:8080/api/cicd/webhook"
+TEMP_BASE="/tmp/cicd-deploy"
+
+# Get repository name from current directory
+REPO_DIR=$(pwd)
+SERVICE_NAME=$(basename "$REPO_DIR" .git | sed 's/-prod$//')
+
+# Create necessary directories
+mkdir -p "$LOG_BASE" "$BACKUP_BASE"
+LOG_FILE="$LOG_BASE/${SERVICE_NAME}-$(date +%Y%m%d_%H%M%S).log"
+
+# Logging function
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+# Webhook notification function  
+notify_webhook() {
+    local status=$1
+    local commit_hash=$2
+    local message=$3
+    
+    curl -X POST "$WEBHOOK_URL" \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"service\": \"$SERVICE_NAME\",
+            \"environment\": \"production\", 
+            \"status\": \"$status\",
+            \"commit_hash\": \"$commit_hash\",
+            \"message\": \"$message\",
+            \"log_file\": \"$LOG_FILE\"
+        }" || true
+}
+
+# Cleanup function
+cleanup() {
+    log "Cleaning up temporary files..."
+    rm -rf "$TEMP_BASE/$SERVICE_NAME"
+}
+
+# Error handler with rollback capability
+handle_error() {
+    local exit_code=$1
+    local line_num=$2
+    log "ERROR: Production deployment failed at line $line_num with exit code $exit_code"
+    
+    # Attempt rollback if backup exists
+    BACKUP_DIR="$BACKUP_BASE/$SERVICE_NAME/$(date +%Y%m%d)"
+    if [[ -d "$BACKUP_DIR" ]]; then
+        log "Attempting automatic rollback..."
+        if restore_backup "$BACKUP_DIR"; then
+            notify_webhook "rollback" "$NEW_COMMIT" "Deployment failed, rolled back to previous version"
+        else
+            notify_webhook "failed" "$NEW_COMMIT" "Deployment failed and rollback failed"
+        fi
+    else
+        notify_webhook "failed" "$NEW_COMMIT" "Production deployment failed at line $line_num"
+    fi
+    
+    cleanup
+    exit $exit_code
+}
+
+# Backup function
+create_backup() {
+    local service_dir="$DEPLOY_BASE/$SERVICE_NAME"
+    local backup_dir="$BACKUP_BASE/$SERVICE_NAME/$(date +%Y%m%d_%H%M%S)"
+    
+    if [[ -d "$service_dir" ]]; then
+        log "Creating backup: $backup_dir"
+        mkdir -p "$backup_dir"
+        cp -r "$service_dir"/* "$backup_dir/" 2>/dev/null || true
+        echo "$backup_dir" > "$BACKUP_BASE/$SERVICE_NAME/.latest_backup"
+        log "Backup created successfully"
+    else
+        log "No existing service directory to backup"
+    fi
+}
+
+# Rollback function
+restore_backup() {
+    local backup_dir=$1
+    local service_dir="$DEPLOY_BASE/$SERVICE_NAME"
+    
+    log "Restoring from backup: $backup_dir"
+    
+    # Stop service first
+    systemctl stop "${SERVICE_NAME}-prod" 2>/dev/null || true
+    
+    # Restore files
+    rm -rf "$service_dir"
+    mkdir -p "$service_dir"
+    cp -r "$backup_dir"/* "$service_dir/"
+    
+    # Start service
+    systemctl start "${SERVICE_NAME}-prod" 2>/dev/null || true
+    
+    log "Rollback completed"
+    return 0
+}
+
+# Set up error handling
+set -e
+trap 'handle_error $? $LINENO' ERR
+trap cleanup EXIT
+
+log "=== Starting Production Environment Deployment ==="
+log "Service: $SERVICE_NAME"
+log "Repository: $REPO_DIR"
+
+# Read the push information
+while read oldrev newrev refname; do
+    # Only process pushes to main branch
+    if [[ $refname != "refs/heads/main" ]]; then
+        log "Ignoring push to $refname (not main branch)"
+        continue
+    fi
+    
+    NEW_COMMIT=$newrev
+    BRANCH=${refname##refs/heads/}
+    
+    log "Processing push to branch: $BRANCH"
+    log "New commit: $NEW_COMMIT"
+    
+    # Verify production-ready tag exists
+    if ! git --git-dir="$REPO_DIR" tag --contains "$NEW_COMMIT" | grep -q "prod-ready-"; then
+        log "ERROR: No production-ready tag found for commit $NEW_COMMIT"
+        log "Production deployment requires a prod-ready-YYYYMMDD-HHMMSS tag"
+        notify_webhook "failed" "$NEW_COMMIT" "Missing production-ready tag"
+        exit 1
+    fi
+    
+    PROD_TAG=$(git --git-dir="$REPO_DIR" tag --contains "$NEW_COMMIT" | grep "prod-ready-" | head -1)
+    log "Found production-ready tag: $PROD_TAG"
+    
+    # Additional production checks
+    log "=== Production Safety Checks ==="
+    
+    # Check if this is a working day and time
+    CURRENT_HOUR=$(date +%H)
+    CURRENT_DAY=$(date +%u)  # 1-7, Monday-Sunday
+    
+    # Allow deployment only during business hours (9-18) on weekdays (1-5)
+    if [[ $CURRENT_DAY -gt 5 ]] || [[ $CURRENT_HOUR -lt 9 ]] || [[ $CURRENT_HOUR -gt 18 ]]; then
+        log "WARNING: Production deployment outside business hours"
+        # In real environment, you might want to require additional approval
+    fi
+    
+    # Notify deployment start
+    notify_webhook "running" "$NEW_COMMIT" "Production deployment started with tag $PROD_TAG"
+    
+    # Create backup before deployment
+    create_backup
+    
+    # Create temporary deployment directory
+    TEMP_DIR="$TEMP_BASE/$SERVICE_NAME"
+    mkdir -p "$TEMP_DIR"
+    
+    log "Checking out code to $TEMP_DIR..."
+    git --git-dir="$REPO_DIR" --work-tree="$TEMP_DIR" checkout -f "$BRANCH"
+    
+    cd "$TEMP_DIR"
+    
+    # Check if production deployment script exists
+    if [[ ! -f "deploy-prod.sh" ]]; then
+        log "ERROR: deploy-prod.sh not found in repository"
+        notify_webhook "failed" "$NEW_COMMIT" "deploy-prod.sh not found"
+        exit 1
+    fi
+    
+    # Make deployment script executable
+    chmod +x deploy-prod.sh
+    
+    log "=== Starting Production Build Process ==="
+    
+    # Execute production deployment script
+    log "Executing deploy-prod.sh..."
+    if ./deploy-prod.sh "$SERVICE_NAME" "$DEPLOY_BASE" >> "$LOG_FILE" 2>&1; then
+        log "Production build and deployment completed successfully"
+        
+        # Perform comprehensive health check
+        log "=== Performing Production Health Check ==="
+        if [[ -f "health-check.sh" ]]; then
+            chmod +x health-check.sh
+            
+            # Wait a bit for service to stabilize
+            sleep 10
+            
+            # Run health check multiple times
+            local health_passed=0
+            for i in {1..3}; do
+                log "Health check attempt $i/3..."
+                if ./health-check.sh "$SERVICE_NAME" "production" >> "$LOG_FILE" 2>&1; then
+                    health_passed=1
+                    break
+                fi
+                sleep 5
+            done
+            
+            if [[ $health_passed -eq 1 ]]; then
+                log "Production health check passed"
+                
+                # Update service info
+                SERVICE_DIR="$DEPLOY_BASE/$SERVICE_NAME"
+                echo "$NEW_COMMIT" > "$SERVICE_DIR/.commit"
+                echo "$(date -Iseconds)" > "$SERVICE_DIR/.deploy_time"
+                echo "production" > "$SERVICE_DIR/.environment"
+                echo "$PROD_TAG" > "$SERVICE_DIR/.production_tag"
+                
+                # Clean up old backups (keep last 5)
+                find "$BACKUP_BASE/$SERVICE_NAME" -maxdepth 1 -type d -name "20*" | sort | head -n -5 | xargs rm -rf 2>/dev/null || true
+                
+                log "=== Production Deployment Completed Successfully ==="
+                notify_webhook "success" "$NEW_COMMIT" "Production deployment successful with tag $PROD_TAG"
+                
+            else
+                log "Production health check failed - initiating rollback"
+                # Error handler will be triggered and perform rollback
+                exit 1
+            fi
+        else
+            log "ERROR: No health check script found for production deployment"
+            notify_webhook "failed" "$NEW_COMMIT" "Missing health-check.sh for production"
+            exit 1
+        fi
+        
+    else
+        log "Production build or deployment failed"
+        notify_webhook "failed" "$NEW_COMMIT" "Production build or deployment failed"
+        exit 1
+    fi
+    
+done
+
+log "=== Production post-receive hook completed ==="

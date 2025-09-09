@@ -557,3 +557,6 @@ export const fetchDeviceMonitoring = async (params: {
   }
 };
 
+// 默认导出axios实例供组件直接使用
+export default api;
+

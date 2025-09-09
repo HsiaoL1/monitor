@@ -1,0 +1,145 @@
+#!/bin/bash
+#
+# Git post-receive hook for test environment
+# This hook is triggered when code is pushed to test server repository
+#
+
+# Configuration
+DEPLOY_BASE="/opt/services-test"
+LOG_BASE="/opt/deployment-logs/test"
+WEBHOOK_URL="http://monitor-server:8080/api/cicd/webhook"
+TEMP_BASE="/tmp/cicd-deploy"
+
+# Get repository name from current directory
+REPO_DIR=$(pwd)
+SERVICE_NAME=$(basename "$REPO_DIR" .git | sed 's/-test$//')
+
+# Create log directory if not exists
+mkdir -p "$LOG_BASE"
+LOG_FILE="$LOG_BASE/${SERVICE_NAME}-$(date +%Y%m%d_%H%M%S).log"
+
+# Logging function
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+# Webhook notification function  
+notify_webhook() {
+    local status=$1
+    local commit_hash=$2
+    local message=$3
+    
+    curl -X POST "$WEBHOOK_URL" \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"service\": \"$SERVICE_NAME\",
+            \"environment\": \"test\", 
+            \"status\": \"$status\",
+            \"commit_hash\": \"$commit_hash\",
+            \"message\": \"$message\",
+            \"log_file\": \"$LOG_FILE\"
+        }" || true
+}
+
+# Cleanup function
+cleanup() {
+    log "Cleaning up temporary files..."
+    rm -rf "$TEMP_BASE/$SERVICE_NAME"
+}
+
+# Error handler
+handle_error() {
+    local exit_code=$1
+    local line_num=$2
+    log "ERROR: Script failed at line $line_num with exit code $exit_code"
+    notify_webhook "failed" "$NEW_COMMIT" "Deployment failed at line $line_num"
+    cleanup
+    exit $exit_code
+}
+
+# Set up error handling
+set -e
+trap 'handle_error $? $LINENO' ERR
+trap cleanup EXIT
+
+log "=== Starting Test Environment Deployment ==="
+log "Service: $SERVICE_NAME"
+log "Repository: $REPO_DIR"
+
+# Read the push information
+while read oldrev newrev refname; do
+    # Only process pushes to test branch
+    if [[ $refname != "refs/heads/test" ]]; then
+        log "Ignoring push to $refname (not test branch)"
+        continue
+    fi
+    
+    NEW_COMMIT=$newrev
+    BRANCH=${refname##refs/heads/}
+    
+    log "Processing push to branch: $BRANCH"
+    log "New commit: $NEW_COMMIT"
+    
+    # Notify deployment start
+    notify_webhook "running" "$NEW_COMMIT" "Deployment started"
+    
+    # Create temporary deployment directory
+    TEMP_DIR="$TEMP_BASE/$SERVICE_NAME"
+    mkdir -p "$TEMP_DIR"
+    
+    log "Checking out code to $TEMP_DIR..."
+    git --git-dir="$REPO_DIR" --work-tree="$TEMP_DIR" checkout -f "$BRANCH"
+    
+    cd "$TEMP_DIR"
+    
+    # Check if deployment script exists
+    if [[ ! -f "deploy-test.sh" ]]; then
+        log "ERROR: deploy-test.sh not found in repository"
+        notify_webhook "failed" "$NEW_COMMIT" "deploy-test.sh not found"
+        exit 1
+    fi
+    
+    # Make deployment script executable
+    chmod +x deploy-test.sh
+    
+    log "=== Starting Build Process ==="
+    
+    # Execute deployment script
+    log "Executing deploy-test.sh..."
+    if ./deploy-test.sh "$SERVICE_NAME" "$DEPLOY_BASE" >> "$LOG_FILE" 2>&1; then
+        log "Build and deployment completed successfully"
+        
+        # Perform health check
+        log "=== Performing Health Check ==="
+        if [[ -f "health-check.sh" ]]; then
+            chmod +x health-check.sh
+            if ./health-check.sh "$SERVICE_NAME" "test" >> "$LOG_FILE" 2>&1; then
+                log "Health check passed"
+                notify_webhook "success" "$NEW_COMMIT" "Deployment successful"
+            else
+                log "Health check failed"
+                notify_webhook "failed" "$NEW_COMMIT" "Health check failed"
+                exit 1
+            fi
+        else
+            log "No health check script found, assuming deployment is healthy"
+            notify_webhook "success" "$NEW_COMMIT" "Deployment successful (no health check)"
+        fi
+        
+        # Update service info
+        SERVICE_DIR="$DEPLOY_BASE/$SERVICE_NAME"
+        echo "$NEW_COMMIT" > "$SERVICE_DIR/.commit"
+        echo "$(date -Iseconds)" > "$SERVICE_DIR/.deploy_time"
+        echo "test" > "$SERVICE_DIR/.environment"
+        
+        log "=== Deployment Completed Successfully ==="
+        
+    else
+        log "Build or deployment failed"
+        notify_webhook "failed" "$NEW_COMMIT" "Build or deployment failed"
+        exit 1
+    fi
+    
+done
+
+log "=== Post-receive hook completed ==="
