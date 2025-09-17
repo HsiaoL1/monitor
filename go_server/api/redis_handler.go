@@ -23,8 +23,8 @@ import (
 
 const (
 	onlineHashKey           = "ims_server_ws:online"
-	heartbeatTimeout        = 60 // 60 seconds
-	HeartbeatTimeoutSeconds = 60 * time.Second
+	heartbeatTimeout        = 3 * 60 // 60 seconds
+	HeartbeatTimeoutSeconds = 3 * 60 * time.Second
 )
 
 var accountSyncLogStorage *storage.AccountSyncLogStorage
@@ -1168,7 +1168,7 @@ func GetOnlineCloudAccountsHandler(c *gin.Context) {
 		if len(userInfo.BdClientNo) == 0 {
 			continue
 		}
-		
+
 		// 检查第一个字符是否为大写字母（云机特征）
 		firstChar := userInfo.BdClientNo[0]
 		if !(firstChar >= 'A' && firstChar <= 'Z') {
