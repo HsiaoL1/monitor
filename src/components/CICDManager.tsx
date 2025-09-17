@@ -92,11 +92,11 @@ const CICDManager: React.FC = () => {
     setLoading(true);
     try {
       // Load deployment history
-      const deploymentRes = await api.get('/api/cicd/deployments?limit=100');
+      const deploymentRes = await api.get('/cicd/deployments?limit=100');
       setDeploymentData(deploymentRes.data.deployments || []);
       
       // Load service environments
-      const envRes = await api.get('/api/cicd/environments');
+      const envRes = await api.get('/cicd/environments');
       setServiceEnvironments(envRes.data.environments || []);
       
     } catch (error) {
@@ -153,7 +153,7 @@ const CICDManager: React.FC = () => {
         force: values.force || false
       };
       
-      await api.post('/api/cicd/deploy/test', request);
+      await api.post('/cicd/deploy/test', request);
       message.success('测试环境部署已启动');
       setDeployModalVisible(false);
       form.resetFields();
@@ -173,7 +173,7 @@ const CICDManager: React.FC = () => {
         promotedBy: 'admin'
       };
       
-      await api.post('/api/cicd/promote', request);
+      await api.post('/cicd/promote', request);
       message.success('生产环境提升已启动');
       setPromoteModalVisible(false);
       form.resetFields();

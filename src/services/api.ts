@@ -203,6 +203,37 @@ export const syncAccountStatus = async (appUniqueIds?: string[], syncAll: boolea
   }
 };
 
+// Account auto-sync APIs
+export const getAutoAccountSyncStatus = async () => {
+  try {
+    const response = await api.get('/account/auto-sync/status');
+    return response.data;
+  } catch (error: any) {
+    console.error('Failed to get auto account sync status:', error);
+    throw error;
+  }
+};
+
+export const startAutoAccountSync = async () => {
+  try {
+    const response = await api.post('/account/auto-sync/start');
+    return response.data;
+  } catch (error: any) {
+    console.error('Failed to start auto account sync task:', error);
+    throw error;
+  }
+};
+
+export const stopAutoAccountSync = async () => {
+  try {
+    const response = await api.post('/account/auto-sync/stop');
+    return response.data;
+  } catch (error: any) {
+    console.error('Failed to stop auto account sync task:', error);
+    throw error;
+  }
+};
+
 // Proxy monitoring APIs
 export const fetchProxyStatus = async (useCache: boolean = true, forceRefresh: boolean = false) => {
   try {

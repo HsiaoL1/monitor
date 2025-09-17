@@ -23,8 +23,8 @@ import (
 
 const (
 	onlineHashKey           = "ims_server_ws:online"
-	heartbeatTimeout        = 3 * 60 // 60 seconds
-	HeartbeatTimeoutSeconds = 3 * 60 * time.Second
+	heartbeatTimeout        = 5 * 60 // 60 seconds
+	HeartbeatTimeoutSeconds = 5 * 60 * time.Second
 )
 
 var accountSyncLogStorage *storage.AccountSyncLogStorage
@@ -241,9 +241,15 @@ func GetAccountMismatchHandler(c *gin.Context) {
 				heartbeatDuration := time.Duration(currentTime-redisInfo.HeartbeatTime) * time.Second
 				mismatch.IsHBTimeOut = heartbeatDuration > HeartbeatTimeoutSeconds
 
-				// 比较在线状态
+				// 比较在线状态 - 调整匹配逻辑
 				dbOnline := (account.OnlineStatus == 1) // 只有状态为1才认为是在线
-				mismatch.StatusMatch = (dbOnline == redisInfo.Online)
+
+				// 如果Redis离线但心跳未超时，认为状态匹配（容忍网络波动）
+				if !redisInfo.Online && !mismatch.IsHBTimeOut {
+					mismatch.StatusMatch = true // 网络波动，不认为是不匹配
+				} else {
+					mismatch.StatusMatch = (dbOnline == redisInfo.Online)
+				}
 			}
 		} else {
 			// Redis中不存在该用户，如果数据库中状态为在线则为不匹配
@@ -357,6 +363,11 @@ func syncSingleAccount(appUniqueID string, rdb *redis.Client) error {
 	var shouldUpdateRedis bool = false
 	var redisInfo UserOnlineInfo
 
+	// 新增：BdClientNo, device_type, cloud_device_id 同步变量
+	var newDevCode string
+	var newDeviceType int
+	var newCloudDeviceID int64
+
 	if err == nil && redisData != "" {
 		// Redis中有数据，解析并判断
 		if err := json.Unmarshal([]byte(redisData), &redisInfo); err == nil {
@@ -364,6 +375,54 @@ func syncSingleAccount(appUniqueID string, rdb *redis.Client) error {
 			currentTime := time.Now().Unix()
 			heartbeatDuration := time.Duration(currentTime-redisInfo.HeartbeatTime) * time.Second
 			isHeartbeatTimeout := heartbeatDuration > HeartbeatTimeoutSeconds
+
+			// 同步BdClientNo到dev_code（如果Redis中在线）
+			if redisInfo.Online && !isHeartbeatTimeout && redisInfo.BdClientNo != "" {
+				newDevCode = redisInfo.BdClientNo
+
+				// 根据BdClientNo格式判断设备类型并获取cloud_device_id
+				if len(redisInfo.BdClientNo) > 0 {
+					// 检查BdClientNo是否包含大写字母（云机特征）
+					hasUpperCase := false
+					hasLowerCase := false
+
+					for _, char := range redisInfo.BdClientNo {
+						if char >= 'A' && char <= 'Z' {
+							hasUpperCase = true
+						} else if char >= 'a' && char <= 'z' {
+							hasLowerCase = true
+						}
+					}
+
+					if hasUpperCase && !hasLowerCase {
+						// 包含大写字母且不包含小写字母：云机 (device_type = 2)
+						newDeviceType = 2
+						// 从cloud_device表获取id
+						var cloudDevice struct {
+							ID int64 `gorm:"column:id"`
+						}
+						if err := db.G.Table("cloud_device").
+							Where("dev_code = ? AND deleted_at IS NULL", redisInfo.BdClientNo).
+							Select("id").
+							First(&cloudDevice).Error; err == nil {
+							newCloudDeviceID = cloudDevice.ID
+						}
+					} else if hasLowerCase && !hasUpperCase {
+						// 包含小写字母且不包含大写字母：盒子 (device_type = 1)
+						newDeviceType = 1
+						// 从ai_box_device表获取id
+						var aiBoxDevice struct {
+							ID int64 `gorm:"column:id"`
+						}
+						if err := db.G.Table("ai_box_device").
+							Where("dev_code = ? AND deleted_at IS NULL", redisInfo.BdClientNo).
+							Select("id").
+							First(&aiBoxDevice).Error; err == nil {
+							newCloudDeviceID = aiBoxDevice.ID
+						}
+					}
+				}
+			}
 
 			if redisInfo.Online && !isHeartbeatTimeout {
 				// Redis显示在线且心跳正常
@@ -376,11 +435,16 @@ func syncSingleAccount(appUniqueID string, rdb *redis.Client) error {
 				reason = fmt.Sprintf("Redis显示在线但心跳超时(%.1f分钟)，同步双方为离线", heartbeatDuration.Minutes())
 				shouldUpdateDB = (account.OnlineStatus != 0)
 				shouldUpdateRedis = true
-			} else {
-				// Redis显示离线
+			} else if isHeartbeatTimeout {
+				// Redis显示离线且心跳超时，同步数据库为离线
 				newOnlineStatus = 0
-				reason = "Redis显示离线，同步数据库为离线"
+				reason = fmt.Sprintf("Redis显示离线且心跳超时(%.1f分钟)，同步数据库为离线", heartbeatDuration.Minutes())
 				shouldUpdateDB = (account.OnlineStatus != 0)
+			} else {
+				// Redis显示离线但心跳未超时，不更新数据库（容忍网络波动）
+				newOnlineStatus = account.OnlineStatus // 保持当前数据库状态
+				reason = fmt.Sprintf("Redis显示离线但心跳未超时(%.1f分钟)，保持当前状态不变", heartbeatDuration.Minutes())
+				shouldUpdateDB = false
 			}
 		} else {
 			// Redis数据格式错误
@@ -408,9 +472,29 @@ func syncSingleAccount(appUniqueID string, rdb *redis.Client) error {
 
 	// 更新数据库状态（如果需要）
 	if shouldUpdateDB {
+		// 构建更新字段映射
+		updateFields := map[string]any{
+			"online_status": newOnlineStatus,
+		}
+
+		// 如果有新的BdClientNo，同步到dev_code
+		if newDevCode != "" {
+			updateFields["dev_code"] = newDevCode
+		}
+
+		// 如果有新的设备类型，同步device_type
+		if newDeviceType > 0 {
+			updateFields["device_type"] = newDeviceType
+		}
+
+		// 如果有新的云设备ID，同步cloud_device_id
+		if newCloudDeviceID > 0 {
+			updateFields["cloud_device_id"] = newCloudDeviceID
+		}
+
 		result := db.G.Table("social_accounts").
 			Where("app_unique_id = ? AND deleted_at IS NULL", appUniqueID).
-			Update("online_status", newOnlineStatus)
+			Updates(updateFields)
 
 		if result.Error != nil {
 			syncSuccess = false

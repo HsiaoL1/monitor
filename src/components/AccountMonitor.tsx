@@ -30,6 +30,7 @@ import {
 } from '@ant-design/icons';
 import { fetchAccountMismatch, syncAccountStatus } from '../services/api';
 import { AccountStatusMismatch } from '../types';
+import AutoAccountSyncManager from './AutoAccountSyncManager';
 
 const AccountMonitor: React.FC = () => {
   const [loading, setLoading] = useState(false);
@@ -294,6 +295,7 @@ const AccountMonitor: React.FC = () => {
         </Space>
       }
     >
+      <AutoAccountSyncManager />
       {data && (
         <>
           {/* 搜索和排序控件 */}

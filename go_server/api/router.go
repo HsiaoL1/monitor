@@ -78,6 +78,14 @@ func SetupRouter() *gin.Engine {
 				accountGroup.POST("/sync-status", SyncAccountStatusHandler)
 				accountGroup.GET("/sync-log", GetAccountSyncLogHandler)
 				accountGroup.GET("/sync-log/download", DownloadAccountSyncLogHandler)
+
+				// Auto-sync routes
+				autoSyncGroup := accountGroup.Group("/auto-sync")
+				{
+					autoSyncGroup.POST("/start", StartAutoAccountSyncHandler)
+					autoSyncGroup.POST("/stop", StopAutoAccountSyncHandler)
+					autoSyncGroup.GET("/status", GetAutoAccountSyncStatusHandler)
+				}
 			}
 
 			// Proxy monitoring routes
