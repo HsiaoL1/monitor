@@ -1,16 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { Button, Tag, Spin, notification, Card, Typography } from 'antd';
+import React, { useState, useEffect } from "react";
+import { Button, Tag, Spin, notification, Card, Typography } from "antd";
 import {
   getAutoReplaceStatus,
   startAutoReplace,
   stopAutoReplace,
-} from '../services/api';
+} from "../services/api";
 
 const { Text } = Typography;
 
 const AutoReplaceManager: React.FC = () => {
   const [isRunning, setIsRunning] = useState<boolean>(false);
-  const [statusMessage, setStatusMessage] = useState<string>('正在获取状态...');
+  const [statusMessage, setStatusMessage] = useState<string>("正在获取状态...");
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const fetchStatus = async () => {
@@ -21,8 +21,8 @@ const AutoReplaceManager: React.FC = () => {
         setStatusMessage(response.statusMessage);
       }
     } catch (error) {
-      setStatusMessage('获取状态失败');
-      console.error('Failed to fetch status', error);
+      setStatusMessage("获取状态失败");
+      console.error("Failed to fetch status", error);
       // Stop polling on error to avoid spamming
       if (intervalId) clearInterval(intervalId);
     } finally {
@@ -42,11 +42,11 @@ const AutoReplaceManager: React.FC = () => {
     setIsLoading(true);
     try {
       await startAutoReplace();
-      notification.success({ message: '任务已启动' });
+      notification.success({ message: "任务已启动" });
       await fetchStatus();
     } catch (error) {
-      notification.error({ message: '启动失败' });
-      console.error('Failed to start task', error);
+      notification.error({ message: "启动失败" });
+      console.error("Failed to start task", error);
       setIsLoading(false);
     }
   };
@@ -55,38 +55,45 @@ const AutoReplaceManager: React.FC = () => {
     setIsLoading(true);
     try {
       await stopAutoReplace();
-      notification.success({ message: '任务已停止' });
+      notification.success({ message: "任务已停止" });
       await fetchStatus();
     } catch (error) {
-      notification.error({ message: '停止失败' });
-      console.error('Failed to stop task', error);
+      notification.error({ message: "停止失败" });
+      console.error("Failed to stop task", error);
       setIsLoading(false);
     }
   };
 
   return (
-    <Card title="代理自动检测与更换" style={{ marginBottom: '20px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '15px' }}>
+    <Card title="代理自动检测与更换" style={{ marginBottom: "20px" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "15px",
+          marginBottom: "15px",
+        }}
+      >
         <Text strong>当前状态:</Text>
         {isLoading && <Spin size="small" />}
-        <Tag color={isRunning ? 'green' : 'red'}>
-          {isRunning ? '运行中' : '已停止'}
+        <Tag color={isRunning ? "green" : "red"}>
+          {isRunning ? "运行中" : "已停止"}
         </Tag>
         <Text type="secondary">{statusMessage}</Text>
       </div>
-      <div style={{ display: 'flex', gap: '10px' }}>
-        <Button 
-          type="primary" 
-          onClick={handleStart} 
+      <div style={{ display: "flex", gap: "10px" }}>
+        <Button
+          type="primary"
+          onClick={handleStart}
           disabled={isRunning || isLoading}
           loading={isLoading && !isRunning}
         >
           启动自动更换
         </Button>
-        <Button 
-          type="dashed" 
-          danger 
-          onClick={handleStop} 
+        <Button
+          type="dashed"
+          danger
+          onClick={handleStop}
           disabled={!isRunning || isLoading}
           loading={isLoading && isRunning}
         >

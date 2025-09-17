@@ -3,12 +3,12 @@ export interface ServiceInfo {
   path: string;
   deployScript: string;
   pprofUrl?: string;
-  status: 'running' | 'stopped' | 'unknown';
+  status: "running" | "stopped" | "unknown";
 }
 
 export interface ServiceMetrics {
   serviceName: string;
-  status: 'running' | 'stopped' | 'unknown';
+  status: "running" | "stopped" | "unknown";
   cpu: number;
   memory: number;
   processes: number;
@@ -26,7 +26,7 @@ export interface ResourceDataPoint {
 
 export interface ServiceResourceHistory {
   serviceName: string;
-  status: 'running' | 'stopped' | 'unknown';
+  status: "running" | "stopped" | "unknown";
   dataPoints: ResourceDataPoint[];
 }
 
@@ -65,7 +65,7 @@ export interface StartServiceResponse extends ApiResponse {
 export interface LogLine {
   id: string;
   timestamp: string;
-  level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG' | 'TRACE';
+  level: "INFO" | "WARN" | "ERROR" | "DEBUG" | "TRACE";
   content: string;
   serviceName: string;
 }
@@ -97,6 +97,7 @@ export interface UserOnlineInfo {
   bdClientNo: string;
   platformId: string;
   thirdApp: string;
+  pluginVersion: string;
 }
 
 export interface SocialAccount {
@@ -173,7 +174,7 @@ export interface ProxyReplaceLogEntry {
   reason?: string;
   errorMessage?: string;
   operator?: string;
-  operatorType: 'manual' | 'auto';
+  operatorType: "manual" | "auto";
 }
 
 // Account sync log types
@@ -187,13 +188,13 @@ export interface AccountSyncLogEntry {
     merchant_id: number;
     platform_id: number;
   };
-  syncType: 'single' | 'batch';
+  syncType: "single" | "batch";
   success: boolean;
   accountsCount: number;
   reason?: string;
   errorMessage?: string;
   operator?: string;
-  operatorType: 'manual' | 'auto';
+  operatorType: "manual" | "auto";
   beforeStatus: number;
   afterStatus: number;
 }
@@ -204,7 +205,7 @@ export interface Pipeline {
   name: string;
   service: string;
   branch: string;
-  status: 'running' | 'success' | 'failed' | 'pending' | 'cancelled';
+  status: "running" | "success" | "failed" | "pending" | "cancelled";
   progress: number;
   startTime: string;
   duration: string;
@@ -216,7 +217,7 @@ export interface Pipeline {
 
 export interface PipelineStage {
   name: string;
-  status: 'running' | 'success' | 'failed' | 'pending' | 'skipped';
+  status: "running" | "success" | "failed" | "pending" | "skipped";
   startTime?: string;
   duration?: string;
   logs?: string;
@@ -226,8 +227,8 @@ export interface Deployment {
   id: string;
   service: string;
   version: string;
-  environment: 'dev' | 'staging' | 'prod';
-  status: 'deploying' | 'deployed' | 'failed' | 'rolled-back';
+  environment: "dev" | "staging" | "prod";
+  status: "deploying" | "deployed" | "failed" | "rolled-back";
   deployTime: string;
   deployedBy: string;
 }
@@ -236,7 +237,7 @@ export interface Deployment {
 export interface LogEntry {
   id: string;
   timestamp: string;
-  level: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR' | 'FATAL';
+  level: "DEBUG" | "INFO" | "WARN" | "ERROR" | "FATAL";
   service: string;
   message: string;
   traceId?: string;
@@ -257,7 +258,7 @@ export interface LogQuery {
   limit: number;
 }
 
-// Trace analysis types  
+// Trace analysis types
 export interface Span {
   traceId: string;
   spanId: string;
@@ -266,7 +267,7 @@ export interface Span {
   operationName: string;
   startTime: number;
   duration: number;
-  status: 'success' | 'error' | 'timeout';
+  status: "success" | "error" | "timeout";
   tags: Record<string, string>;
   logs: SpanLog[];
   childSpans?: Span[];
@@ -274,7 +275,7 @@ export interface Span {
 
 export interface SpanLog {
   timestamp: number;
-  level: 'info' | 'warn' | 'error';
+  level: "info" | "warn" | "error";
   message: string;
   fields?: Record<string, any>;
 }

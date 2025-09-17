@@ -1,27 +1,27 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Card, 
-  Table, 
-  Button, 
-  Space, 
-  Typography, 
-  Tag, 
-  Alert, 
-  Modal, 
+import React, { useState, useEffect } from "react";
+import {
+  Card,
+  Table,
+  Button,
+  Space,
+  Typography,
+  Tag,
+  Alert,
+  Modal,
   message,
   Spin,
   Row,
   Col,
-  Statistic
-} from 'antd';
-import { 
-  ReloadOutlined, 
-  DeleteOutlined, 
+  Statistic,
+} from "antd";
+import {
+  ReloadOutlined,
+  DeleteOutlined,
   ExclamationCircleOutlined,
   UserOutlined,
-  ClockCircleOutlined
-} from '@ant-design/icons';
-import { fetchStaleUsers, cleanupStaleUsers } from '../services/api';
+  ClockCircleOutlined,
+} from "@ant-design/icons";
+import { fetchStaleUsers, cleanupStaleUsers } from "../services/api";
 
 const { Title, Text } = Typography;
 const { confirm } = Modal;
@@ -46,23 +46,22 @@ const RedisMonitor: React.FC = () => {
   const [cleaning, setCleaning] = useState(false);
   const [staleUsers, setStaleUsers] = useState<UserOnlineInfo[]>([]);
   const [totalUsers, setTotalUsers] = useState(0);
-  const [lastUpdateTime, setLastUpdateTime] = useState<string>('');
+  const [lastUpdateTime, setLastUpdateTime] = useState<string>("");
 
   // 获取异常用户数据
   const fetchData = async () => {
     setLoading(true);
     try {
-      console.log('Fetching stale users from Redis...');
+      console.log("Fetching stale users from Redis...");
       const response = await fetchStaleUsers();
-      console.log('Received stale users data:', response);
-      
+      console.log("Received stale users data:", response);
+
       setStaleUsers(response.staleUsers || []);
       setTotalUsers(response.totalUsers || 0);
       setLastUpdateTime(new Date().toLocaleString());
-      
     } catch (error: any) {
-      console.error('Failed to fetch stale users:', error);
-      message.error(`获取数据失败: ${error.message || '网络错误'}`);
+      console.error("Failed to fetch stale users:", error);
+      message.error(`获取数据失败: ${error.message || "网络错误"}`);
     } finally {
       setLoading(false);
     }
@@ -71,31 +70,30 @@ const RedisMonitor: React.FC = () => {
   // 一键清理异常用户
   const handleCleanup = () => {
     if (staleUsers.length === 0) {
-      message.info('没有需要清理的异常用户');
+      message.info("没有需要清理的异常用户");
       return;
     }
 
     confirm({
-      title: '确认清理异常用户',
+      title: "确认清理异常用户",
       icon: <ExclamationCircleOutlined />,
       content: `即将清理 ${staleUsers.length} 个心跳超时的异常用户，将其在线状态设置为离线。此操作不可撤销，是否继续？`,
-      okText: '确认清理',
-      okType: 'danger',
-      cancelText: '取消',
+      okText: "确认清理",
+      okType: "danger",
+      cancelText: "取消",
       async onOk() {
         setCleaning(true);
         try {
-          console.log('Starting cleanup of stale users...');
+          console.log("Starting cleanup of stale users...");
           const response = await cleanupStaleUsers();
-          console.log('Cleanup result:', response);
-          
+          console.log("Cleanup result:", response);
+
           message.success(`成功清理 ${response.cleanedCount || 0} 个异常用户`);
           // 清理完成后重新获取数据
           await fetchData();
-          
         } catch (error: any) {
-          console.error('Failed to cleanup stale users:', error);
-          message.error(`清理失败: ${error.message || '网络错误'}`);
+          console.error("Failed to cleanup stale users:", error);
+          message.error(`清理失败: ${error.message || "网络错误"}`);
         } finally {
           setCleaning(false);
         }
@@ -107,7 +105,7 @@ const RedisMonitor: React.FC = () => {
   const formatTimeDiff = (seconds: number): string => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
-    
+
     if (minutes > 0) {
       return `${minutes}分${remainingSeconds}秒`;
     }
@@ -117,67 +115,81 @@ const RedisMonitor: React.FC = () => {
   // 表格列定义
   const columns = [
     {
-      title: '用户标识',
-      dataIndex: 'userKey',
-      key: 'userKey',
+      title: "用户标识",
+      dataIndex: "userKey",
+      key: "userKey",
       width: 200,
-      render: (text: string) => <Text code style={{ fontSize: '12px' }}>{text}</Text>
+      render: (text: string) => (
+        <Text code style={{ fontSize: "12px" }}>
+          {text}
+        </Text>
+      ),
     },
     {
-      title: '平台信息',
-      key: 'platform',
+      title: "平台信息",
+      key: "platform",
       width: 150,
       render: (_: any, record: UserOnlineInfo) => (
         <div>
-          <div><Text strong>{record.platformId}</Text></div>
-          <div><Text type="secondary" style={{ fontSize: '12px' }}>{record.thirdApp}</Text></div>
+          <div>
+            <Text strong>{record.platformId}</Text>
+          </div>
+          <div>
+            <Text type="secondary" style={{ fontSize: "12px" }}>
+              {record.thirdApp}
+            </Text>
+          </div>
         </div>
-      )
+      ),
     },
     {
-      title: '设备号',
-      dataIndex: 'bdClientNo',
-      key: 'bdClientNo',
+      title: "设备号",
+      dataIndex: "bdClientNo",
+      key: "bdClientNo",
       width: 150,
-      render: (text: string) => <Text style={{ fontSize: '12px' }}>{text || '-'}</Text>
+      render: (text: string) => (
+        <Text style={{ fontSize: "12px" }}>{text || "-"}</Text>
+      ),
     },
     {
-      title: '心跳时间',
-      key: 'heartbeat',
+      title: "心跳时间",
+      key: "heartbeat",
       width: 180,
       render: (_: any, record: UserOnlineInfo) => (
         <div>
           <div>{record.heartbeatTimeFormatted}</div>
-          <Tag color="red" style={{ fontSize: '11px' }}>
+          <Tag color="red" style={{ fontSize: "11px" }}>
             超时 {formatTimeDiff(record.timeoutSeconds)}
           </Tag>
         </div>
-      )
+      ),
     },
     {
-      title: '登录时间',
-      dataIndex: 'loginTimeFormatted',
-      key: 'loginTime',
-      width: 160
+      title: "登录时间",
+      dataIndex: "loginTimeFormatted",
+      key: "loginTime",
+      width: 160,
     },
     {
-      title: '服务器',
-      key: 'server',
+      title: "服务器",
+      key: "server",
       width: 130,
       render: (_: any, record: UserOnlineInfo) => (
-        <Text style={{ fontSize: '12px' }}>{record.server}:{record.http_port}</Text>
-      )
+        <Text style={{ fontSize: "12px" }}>
+          {record.server}:{record.http_port}
+        </Text>
+      ),
     },
     {
-      title: '在线状态',
-      key: 'status',
+      title: "在线状态",
+      key: "status",
       width: 80,
       render: (_: any, record: UserOnlineInfo) => (
-        <Tag color={record.online ? 'red' : 'default'}>
-          {record.online ? '异常在线' : '已离线'}
+        <Tag color={record.online ? "red" : "default"}>
+          {record.online ? "异常在线" : "已离线"}
         </Tag>
-      )
-    }
+      ),
+    },
   ];
 
   // 组件挂载时获取数据
@@ -189,7 +201,7 @@ const RedisMonitor: React.FC = () => {
   }, []);
 
   return (
-    <div style={{ height: 'calc(100vh - 112px)', overflow: 'auto' }}>
+    <div style={{ height: "calc(100vh - 112px)", overflow: "auto" }}>
       <div style={{ marginBottom: 24 }}>
         <Title level={2}>Redis 异常账号监控</Title>
         <Text type="secondary">
@@ -214,7 +226,9 @@ const RedisMonitor: React.FC = () => {
               title="异常用户数"
               value={staleUsers.length}
               prefix={<ExclamationCircleOutlined />}
-              valueStyle={{ color: staleUsers.length > 0 ? '#ff4d4f' : '#52c41a' }}
+              valueStyle={{
+                color: staleUsers.length > 0 ? "#ff4d4f" : "#52c41a",
+              }}
             />
           </Card>
         </Col>
@@ -222,19 +236,27 @@ const RedisMonitor: React.FC = () => {
           <Card size="small">
             <Statistic
               title="异常占比"
-              value={totalUsers > 0 ? ((staleUsers.length / totalUsers) * 100).toFixed(1) : '0'}
+              value={
+                totalUsers > 0
+                  ? ((staleUsers.length / totalUsers) * 100).toFixed(1)
+                  : "0"
+              }
               suffix="%"
               prefix={<ClockCircleOutlined />}
-              valueStyle={{ color: staleUsers.length > 0 ? '#ff4d4f' : '#52c41a' }}
+              valueStyle={{
+                color: staleUsers.length > 0 ? "#ff4d4f" : "#52c41a",
+              }}
             />
           </Card>
         </Col>
         <Col span={6}>
-          <Card size="small" style={{ textAlign: 'center' }}>
+          <Card size="small" style={{ textAlign: "center" }}>
             <div style={{ marginBottom: 8 }}>
               <Text type="secondary">最后更新</Text>
             </div>
-            <Text strong style={{ fontSize: '12px' }}>{lastUpdateTime}</Text>
+            <Text strong style={{ fontSize: "12px" }}>
+              {lastUpdateTime}
+            </Text>
           </Card>
         </Col>
       </Row>
@@ -242,7 +264,7 @@ const RedisMonitor: React.FC = () => {
       {/* 操作按钮 */}
       <div style={{ marginBottom: 16 }}>
         <Space>
-          <Button 
+          <Button
             type="primary"
             icon={<ReloadOutlined />}
             onClick={fetchData}
@@ -250,7 +272,7 @@ const RedisMonitor: React.FC = () => {
           >
             刷新数据
           </Button>
-          <Button 
+          <Button
             danger
             icon={<DeleteOutlined />}
             onClick={handleCleanup}
@@ -292,12 +314,12 @@ const RedisMonitor: React.FC = () => {
               pageSize: 20,
               showSizeChanger: true,
               showQuickJumper: true,
-              showTotal: (total) => `共 ${total} 条异常记录`
+              showTotal: (total) => `共 ${total} 条异常记录`,
             }}
             size="small"
             scroll={{ x: 1200 }}
             locale={{
-              emptyText: loading ? '加载中...' : '暂无异常用户数据'
+              emptyText: loading ? "加载中..." : "暂无异常用户数据",
             }}
           />
         </Spin>

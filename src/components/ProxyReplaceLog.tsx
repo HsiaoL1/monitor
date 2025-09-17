@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   Card,
   Table,
@@ -14,8 +14,8 @@ import {
   Tooltip,
   Typography,
   Descriptions,
-  Modal
-} from 'antd';
+  Modal,
+} from "antd";
 import {
   ReloadOutlined,
   DownloadOutlined,
@@ -24,11 +24,11 @@ import {
   SwapOutlined,
   EyeOutlined,
   GlobalOutlined,
-  HistoryOutlined
-} from '@ant-design/icons';
-import { fetchProxyReplaceLog, downloadReplaceLog } from '../services/api';
-import { ProxyReplaceLogEntry } from '../types';
-import dayjs from 'dayjs';
+  HistoryOutlined,
+} from "@ant-design/icons";
+import { fetchProxyReplaceLog, downloadReplaceLog } from "../services/api";
+import { ProxyReplaceLogEntry } from "../types";
+import dayjs from "dayjs";
 
 const { RangePicker } = DatePicker;
 const { Text, Title } = Typography;
@@ -50,26 +50,27 @@ const ProxyReplaceLog: React.FC = () => {
   const [downloading, setDownloading] = useState(false);
   const [data, setData] = useState<ProxyReplaceLogResponse | null>(null);
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([
-    dayjs().subtract(7, 'day'),
-    dayjs()
+    dayjs().subtract(7, "day"),
+    dayjs(),
   ]);
-  const [selectedRecord, setSelectedRecord] = useState<ProxyReplaceLogEntry | null>(null);
+  const [selectedRecord, setSelectedRecord] =
+    useState<ProxyReplaceLogEntry | null>(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
 
   const fetchLogs = async () => {
     setLoading(true);
     try {
-      const startDate = dateRange[0].format('YYYY-MM-DD');
-      const endDate = dateRange[1].format('YYYY-MM-DD');
-      
+      const startDate = dateRange[0].format("YYYY-MM-DD");
+      const endDate = dateRange[1].format("YYYY-MM-DD");
+
       const result = await fetchProxyReplaceLog({ startDate, endDate });
       if (result.success) {
         setData(result);
       } else {
-        message.error('获取代理更换日志失败');
+        message.error("获取代理更换日志失败");
       }
     } catch (error: any) {
-      message.error('获取代理更换日志失败: ' + error.message);
+      message.error("获取代理更换日志失败: " + error.message);
     } finally {
       setLoading(false);
     }
@@ -78,13 +79,13 @@ const ProxyReplaceLog: React.FC = () => {
   const handleDownload = async () => {
     setDownloading(true);
     try {
-      const startDate = dateRange[0].format('YYYY-MM-DD');
-      const endDate = dateRange[1].format('YYYY-MM-DD');
-      
+      const startDate = dateRange[0].format("YYYY-MM-DD");
+      const endDate = dateRange[1].format("YYYY-MM-DD");
+
       await downloadReplaceLog({ startDate, endDate });
-      message.success('日志导出成功');
+      message.success("日志导出成功");
     } catch (error: any) {
-      message.error('导出失败: ' + error.message);
+      message.error("导出失败: " + error.message);
     } finally {
       setDownloading(false);
     }
@@ -113,86 +114,91 @@ const ProxyReplaceLog: React.FC = () => {
 
   const columns = [
     {
-      title: '更换时间',
-      dataIndex: 'replaceTime',
-      key: 'replaceTime',
+      title: "更换时间",
+      dataIndex: "replaceTime",
+      key: "replaceTime",
       width: 180,
       render: (time: string) => new Date(time).toLocaleString(),
       sorter: (a: ProxyReplaceLogEntry, b: ProxyReplaceLogEntry) =>
         new Date(a.replaceTime).getTime() - new Date(b.replaceTime).getTime(),
-      defaultSortOrder: 'descend' as any,
+      defaultSortOrder: "descend" as any,
     },
     {
-      title: '原代理',
-      key: 'oldProxy',
+      title: "原代理",
+      key: "oldProxy",
       width: 200,
       render: (record: ProxyReplaceLogEntry) => (
         <div>
           <div>
-            <strong>{record.oldProxy.ip}:{record.oldProxy.port}</strong>
+            <strong>
+              {record.oldProxy.ip}:{record.oldProxy.port}
+            </strong>
           </div>
-          <div style={{ color: '#888', fontSize: '12px' }}>
+          <div style={{ color: "#888", fontSize: "12px" }}>
             ID: {record.oldProxy.id} | 商户: {record.oldProxy.merchant_id}
           </div>
         </div>
       ),
     },
     {
-      title: '新代理',
-      key: 'newProxy',
+      title: "新代理",
+      key: "newProxy",
       width: 200,
       render: (record: ProxyReplaceLogEntry) => (
         <div>
           <div>
-            <strong>{record.newProxy.ip}:{record.newProxy.port}</strong>
+            <strong>
+              {record.newProxy.ip}:{record.newProxy.port}
+            </strong>
           </div>
-          <div style={{ color: '#888', fontSize: '12px' }}>
+          <div style={{ color: "#888", fontSize: "12px" }}>
             ID: {record.newProxy.id} | 商户: {record.newProxy.merchant_id}
           </div>
         </div>
       ),
     },
     {
-      title: '状态',
-      key: 'success',
+      title: "状态",
+      key: "success",
       width: 100,
       render: (record: ProxyReplaceLogEntry) => getStatusTag(record.success),
       filters: [
-        { text: '成功', value: true },
-        { text: '失败', value: false },
+        { text: "成功", value: true },
+        { text: "失败", value: false },
       ],
       onFilter: (value: boolean | React.Key, record: ProxyReplaceLogEntry) =>
         record.success === value,
     },
     {
-      title: '影响设备数',
-      dataIndex: 'devicesCount',
-      key: 'devicesCount',
+      title: "影响设备数",
+      dataIndex: "devicesCount",
+      key: "devicesCount",
       width: 120,
       render: (count: number) => (
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{count}</div>
-          <div style={{ fontSize: '12px', color: '#888' }}>个设备</div>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: "16px", fontWeight: "bold" }}>{count}</div>
+          <div style={{ fontSize: "12px", color: "#888" }}>个设备</div>
         </div>
       ),
-      sorter: (a: ProxyReplaceLogEntry, b: ProxyReplaceLogEntry) => a.devicesCount - b.devicesCount,
+      sorter: (a: ProxyReplaceLogEntry, b: ProxyReplaceLogEntry) =>
+        a.devicesCount - b.devicesCount,
     },
     {
-      title: '执行者',
-      dataIndex: 'operator',
-      key: 'operator',
+      title: "执行者",
+      dataIndex: "operator",
+      key: "operator",
       width: 120,
-      render: (operator: string) => operator || '系统',
+      render: (operator: string) => operator || "系统",
     },
     {
-      title: '更换原因',
-      key: 'reason',
+      title: "更换原因",
+      key: "reason",
       width: 200,
       render: (record: ProxyReplaceLogEntry) => (
         <div>
-          <div>{record.reason || '-'}</div>
+          <div>{record.reason || "-"}</div>
           {!record.success && record.errorMessage && (
-            <div style={{ color: '#ff4d4f', fontSize: '12px', marginTop: 4 }}>
+            <div style={{ color: "#ff4d4f", fontSize: "12px", marginTop: 4 }}>
               {record.errorMessage}
             </div>
           )}
@@ -200,8 +206,8 @@ const ProxyReplaceLog: React.FC = () => {
       ),
     },
     {
-      title: '操作',
-      key: 'action',
+      title: "操作",
+      key: "action",
       width: 100,
       render: (record: ProxyReplaceLogEntry) => (
         <Button
@@ -267,7 +273,7 @@ const ProxyReplaceLog: React.FC = () => {
               <Statistic
                 title="成功次数"
                 value={data.successCount}
-                valueStyle={{ color: '#3f8600' }}
+                valueStyle={{ color: "#3f8600" }}
                 prefix={<CheckCircleOutlined />}
               />
             </Col>
@@ -275,17 +281,25 @@ const ProxyReplaceLog: React.FC = () => {
               <Statistic
                 title="失败次数"
                 value={data.failureCount}
-                valueStyle={{ color: '#cf1322' }}
+                valueStyle={{ color: "#cf1322" }}
                 prefix={<CloseCircleOutlined />}
               />
             </Col>
             <Col span={6}>
               <Statistic
                 title="成功率"
-                value={data.totalRecords > 0 ? ((data.successCount / data.totalRecords) * 100).toFixed(1) : '0'}
+                value={
+                  data.totalRecords > 0
+                    ? ((data.successCount / data.totalRecords) * 100).toFixed(1)
+                    : "0"
+                }
                 suffix="%"
                 valueStyle={{
-                  color: data.totalRecords > 0 && data.successCount / data.totalRecords >= 0.9 ? '#3f8600' : '#cf1322'
+                  color:
+                    data.totalRecords > 0 &&
+                    data.successCount / data.totalRecords >= 0.9
+                      ? "#3f8600"
+                      : "#cf1322",
                 }}
               />
             </Col>
@@ -304,7 +318,9 @@ const ProxyReplaceLog: React.FC = () => {
           <Table
             dataSource={data.logs}
             columns={columns}
-            rowKey={(record) => `${record.replaceTime}-${record.oldProxy.id}-${record.newProxy.id}`}
+            rowKey={(record) =>
+              `${record.replaceTime}-${record.oldProxy.id}-${record.newProxy.id}`
+            }
             loading={loading}
             pagination={{
               showSizeChanger: true,
@@ -312,7 +328,7 @@ const ProxyReplaceLog: React.FC = () => {
               showTotal: (total, range) =>
                 `第 ${range[0]}-${range[1]} 条，共 ${total} 条记录`,
               pageSize: 20,
-              pageSizeOptions: ['10', '20', '50', '100'],
+              pageSizeOptions: ["10", "20", "50", "100"],
             }}
             scroll={{ x: 1200 }}
           />
@@ -342,10 +358,10 @@ const ProxyReplaceLog: React.FC = () => {
               {selectedRecord.devicesCount} 个
             </Descriptions.Item>
             <Descriptions.Item label="执行者" span={1}>
-              {selectedRecord.operator || '系统'}
+              {selectedRecord.operator || "系统"}
             </Descriptions.Item>
             <Descriptions.Item label="更换原因" span={3}>
-              {selectedRecord.reason || '-'}
+              {selectedRecord.reason || "-"}
             </Descriptions.Item>
             {!selectedRecord.success && selectedRecord.errorMessage && (
               <Descriptions.Item label="错误信息" span={3}>
@@ -354,16 +370,20 @@ const ProxyReplaceLog: React.FC = () => {
             )}
             <Descriptions.Item label="原代理信息" span={3}>
               <div>
-                <GlobalOutlined /> {selectedRecord.oldProxy.ip}:{selectedRecord.oldProxy.port}
+                <GlobalOutlined /> {selectedRecord.oldProxy.ip}:
+                {selectedRecord.oldProxy.port}
                 <br />
-                ID: {selectedRecord.oldProxy.id}, 商户ID: {selectedRecord.oldProxy.merchant_id}
+                ID: {selectedRecord.oldProxy.id}, 商户ID:{" "}
+                {selectedRecord.oldProxy.merchant_id}
               </div>
             </Descriptions.Item>
             <Descriptions.Item label="新代理信息" span={3}>
               <div>
-                <GlobalOutlined /> {selectedRecord.newProxy.ip}:{selectedRecord.newProxy.port}
+                <GlobalOutlined /> {selectedRecord.newProxy.ip}:
+                {selectedRecord.newProxy.port}
                 <br />
-                ID: {selectedRecord.newProxy.id}, 商户ID: {selectedRecord.newProxy.merchant_id}
+                ID: {selectedRecord.newProxy.id}, 商户ID:{" "}
+                {selectedRecord.newProxy.merchant_id}
               </div>
             </Descriptions.Item>
           </Descriptions>

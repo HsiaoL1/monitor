@@ -41,14 +41,16 @@ import {
   getAsyncCheckStatus,
 } from "../services/api";
 import { ProxyStatus, DeviceInfo } from "../types";
-import AutoReplaceManager from './AutoReplaceManager';
+import AutoReplaceManager from "./AutoReplaceManager";
 
 const { Text } = Typography;
 
 const ProxyMonitor: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [notifying, setNotifying] = useState(false);
-  const [replacingProxyIds, setReplacingProxyIds] = useState<Set<number>>(new Set());
+  const [replacingProxyIds, setReplacingProxyIds] = useState<Set<number>>(
+    new Set(),
+  );
   const [data, setData] = useState<{
     totalProxies: number;
     unavailableCount: number;
@@ -62,7 +64,7 @@ const ProxyMonitor: React.FC = () => {
   const [selectedRecord, setSelectedRecord] = useState<ProxyStatus | null>(
     null,
   );
-  
+
   // 异步检测状态
   const [asyncCheckStatus, setAsyncCheckStatus] = useState<{
     taskId?: string;
@@ -88,7 +90,9 @@ const ProxyMonitor: React.FC = () => {
       if (result.success) {
         setData(result);
         if (result.cached && !forceRefresh) {
-          message.info(`已加载缓存数据 (缓存时间: ${new Date(result.cacheTime || '').toLocaleString()})`);
+          message.info(
+            `已加载缓存数据 (缓存时间: ${new Date(result.cacheTime || "").toLocaleString()})`,
+          );
         } else if (!result.cached && !forceRefresh) {
           message.warning('缓存数据为空，建议点击"全量刷新"获取最新数据');
         }
@@ -120,18 +124,18 @@ const ProxyMonitor: React.FC = () => {
       if (result.success) {
         setAsyncCheckStatus({
           taskId: result.task_id,
-          status: 'running',
+          status: "running",
           progress: 0,
           total: 0,
           completed: 0,
         });
-        message.success('后台检测任务已启动，请等待完成');
-        
+        message.success("后台检测任务已启动，请等待完成");
+
         // 开始轮询检测状态
         pollAsyncStatus(result.task_id);
       }
     } catch (error: any) {
-      message.error('启动异步检测失败: ' + error.message);
+      message.error("启动异步检测失败: " + error.message);
       setAsyncChecking(false);
     }
   };
@@ -143,28 +147,28 @@ const ProxyMonitor: React.FC = () => {
         const result = await getAsyncCheckStatus(taskId);
         if (result.success) {
           setAsyncCheckStatus(result.task);
-          
-          if (result.task.status === 'completed') {
+
+          if (result.task.status === "completed") {
             message.success(`代理检测完成！共检测 ${result.task.total} 个代理`);
             setAsyncChecking(false);
             // 刷新数据显示最新结果
             fetchData();
             return;
-          } else if (result.task.status === 'failed') {
-            message.error('代理检测失败: ' + result.task.error_message);
+          } else if (result.task.status === "failed") {
+            message.error("代理检测失败: " + result.task.error_message);
             setAsyncChecking(false);
             return;
           }
-          
+
           // 如果还在运行，继续轮询
           setTimeout(checkStatus, 2000);
         }
       } catch (error: any) {
-        console.error('Failed to get async status:', error);
+        console.error("Failed to get async status:", error);
         setTimeout(checkStatus, 5000); // 错误时减少轮询频率
       }
     };
-    
+
     checkStatus();
   };
 
@@ -222,7 +226,7 @@ const ProxyMonitor: React.FC = () => {
 
   const handleReplaceProxy = async (proxyId: number) => {
     // 设置当前代理为加载中
-    setReplacingProxyIds(prev => {
+    setReplacingProxyIds((prev) => {
       const next = new Set(prev);
       next.add(proxyId);
       return next;
@@ -270,10 +274,16 @@ const ProxyMonitor: React.FC = () => {
                 `代理更换成功，共更新 ${replaceResult.updatedDevices} 个设备`,
               );
               fetchData(); // 刷新数据
-            } else if (replaceResult.success && replaceResult.updatedDevices === 0) {
-              message.error("代理更换失败：没有设备被更新，可能是没有设备使用该代理或更新过程中发生错误");
+            } else if (
+              replaceResult.success &&
+              replaceResult.updatedDevices === 0
+            ) {
+              message.error(
+                "代理更换失败：没有设备被更新，可能是没有设备使用该代理或更新过程中发生错误",
+              );
             } else {
-              const errorMsg = replaceResult.error || replaceResult.message || "未知错误";
+              const errorMsg =
+                replaceResult.error || replaceResult.message || "未知错误";
               message.error("代理更换失败: " + errorMsg);
             }
           } catch (error: any) {
@@ -282,18 +292,18 @@ const ProxyMonitor: React.FC = () => {
         },
         onCancel: () => {
           // 取消时也要移除loading状态
-          setReplacingProxyIds(prev => {
+          setReplacingProxyIds((prev) => {
             const next = new Set(prev);
             next.delete(proxyId);
             return next;
           });
-        }
+        },
       });
     } catch (error: any) {
       message.error("查找替代代理失败: " + error.message);
     } finally {
       // 移除当前代理的loading状态
-      setReplacingProxyIds(prev => {
+      setReplacingProxyIds((prev) => {
         const next = new Set(prev);
         next.delete(proxyId);
         return next;
@@ -628,19 +638,28 @@ const ProxyMonitor: React.FC = () => {
           {/* 异步检测进度显示 */}
           {asyncChecking && asyncCheckStatus && (
             <Card style={{ marginBottom: 16 }}>
-              <Space direction="vertical" style={{ width: '100%' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Space direction="vertical" style={{ width: "100%" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
                   <Text strong>后台检测进行中...</Text>
                   <Text type="secondary">
-                    {asyncCheckStatus.completed || 0} / {asyncCheckStatus.total || 0}
+                    {asyncCheckStatus.completed || 0} /{" "}
+                    {asyncCheckStatus.total || 0}
                   </Text>
                 </div>
                 <Progress
                   percent={asyncCheckStatus.progress || 0}
-                  status={asyncCheckStatus.status === 'running' ? 'active' : 'normal'}
+                  status={
+                    asyncCheckStatus.status === "running" ? "active" : "normal"
+                  }
                   strokeColor={{
-                    from: '#108ee9',
-                    to: '#87d068',
+                    from: "#108ee9",
+                    to: "#87d068",
                   }}
                 />
               </Space>
@@ -651,11 +670,18 @@ const ProxyMonitor: React.FC = () => {
           {data.cached && (
             <Alert
               message="正在显示缓存数据"
-              description={`缓存时间: ${new Date(data.cacheTime || '').toLocaleString()}。点击"全量刷新"获取最新数据，或使用"后台全量检测"进行完整检测。`}
+              description={`缓存时间: ${new Date(data.cacheTime || "").toLocaleString()}。点击"全量刷新"获取最新数据，或使用"后台全量检测"进行完整检测。`}
               type="info"
               showIcon
               action={[
-                <Button key="refresh" size="small" type="primary" onClick={() => fetchData(true)}>全量刷新</Button>
+                <Button
+                  key="refresh"
+                  size="small"
+                  type="primary"
+                  onClick={() => fetchData(true)}
+                >
+                  全量刷新
+                </Button>,
               ]}
               style={{ marginBottom: 16 }}
             />
