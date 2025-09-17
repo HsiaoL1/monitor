@@ -45,6 +45,7 @@ type UserOnlineInfo struct {
 	BdClientNo             string `json:"bdClientNo"`
 	PlatformId             string `json:"platformId"`
 	ThirdApp               string `json:"thirdApp"`
+	PluginVersion          string `json:"pluginVersion"`
 }
 
 type SocialAccount struct {
@@ -367,6 +368,7 @@ func syncSingleAccount(appUniqueID string, rdb *redis.Client) error {
 	var newDevCode string
 	var newDeviceType int
 	var newCloudDeviceID int64
+	var newPluginVersion string
 
 	if err == nil && redisData != "" {
 		// Redis中有数据，解析并判断
@@ -379,7 +381,7 @@ func syncSingleAccount(appUniqueID string, rdb *redis.Client) error {
 			// 同步BdClientNo到dev_code（如果Redis中在线）
 			if redisInfo.Online && !isHeartbeatTimeout && redisInfo.BdClientNo != "" {
 				newDevCode = redisInfo.BdClientNo
-
+				newPluginVersion = redisInfo.PluginVersion
 				// 根据BdClientNo格式判断设备类型并获取cloud_device_id
 				if len(redisInfo.BdClientNo) > 0 {
 					// 检查BdClientNo是否包含大写字母（云机特征）
@@ -474,7 +476,8 @@ func syncSingleAccount(appUniqueID string, rdb *redis.Client) error {
 	if shouldUpdateDB {
 		// 构建更新字段映射
 		updateFields := map[string]any{
-			"online_status": newOnlineStatus,
+			"online_status":  newOnlineStatus,
+			"plugin_version": newPluginVersion,
 		}
 
 		// 如果有新的BdClientNo，同步到dev_code
