@@ -49,6 +49,7 @@ const AccountMonitor: React.FC = () => {
   // 搜索和排序状态
   const [searchAccount, setSearchAccount] = useState<string>("");
   const [searchMerchantId, setSearchMerchantId] = useState<string>("");
+  const [mismatchType, setMismatchType] = useState<string>("status"); // 默认显示在线状态不匹配
   const [sortOrder, setSortOrder] = useState<"asc" | "desc" | null>(null);
   const [pageSize, setPageSize] = useState<number>(20);
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -115,6 +116,7 @@ const AccountMonitor: React.FC = () => {
   const resetFilters = () => {
     setSearchAccount("");
     setSearchMerchantId("");
+    setMismatchType("status");
     setSortOrder(null);
     setCurrentPage(1);
     setSelectedRowKeys([]);
@@ -133,7 +135,19 @@ const AccountMonitor: React.FC = () => {
       const merchantMatch =
         !searchMerchantId ||
         item.social_account.merchant_id.toString().includes(searchMerchantId);
-      return accountMatch && merchantMatch;
+
+      // 不匹配类型筛选
+      let mismatchMatch = true;
+      if (mismatchType === "status") {
+        mismatchMatch = !item.status_match; // 只显示在线状态不匹配
+      } else if (mismatchType === "device") {
+        mismatchMatch = !item.dev_code_match; // 只显示设备编码不匹配
+      } else if (mismatchType === "both") {
+        mismatchMatch = !item.status_match && !item.dev_code_match; // 两种都不匹配
+      }
+      // mismatchType === "all" 时显示所有不匹配的记录
+
+      return accountMatch && merchantMatch && mismatchMatch;
     });
 
     // 按心跳时间排序（如果有Redis数据的话）
@@ -146,7 +160,7 @@ const AccountMonitor: React.FC = () => {
     }
 
     return filtered;
-  }, [data?.mismatches, searchAccount, searchMerchantId, sortOrder]);
+  }, [data?.mismatches, searchAccount, searchMerchantId, mismatchType, sortOrder]);
 
   const getOnlineStatusText = (status: number) => {
     const statusMap: Record<number, { text: string; color: string }> = {
@@ -238,20 +252,36 @@ const AccountMonitor: React.FC = () => {
     {
       title: "状态匹配",
       key: "status_match",
-      width: 100,
+      width: 130,
       render: (record: AccountStatusMismatch) => (
-        <Tag
-          color={record.status_match ? "success" : "error"}
-          icon={
-            record.status_match ? (
-              <CheckCircleOutlined />
-            ) : (
-              <CloseCircleOutlined />
-            )
-          }
-        >
-          {record.status_match ? "匹配" : "不匹配"}
-        </Tag>
+        <div>
+          <Tag
+            color={record.status_match ? "success" : "error"}
+            icon={
+              record.status_match ? (
+                <CheckCircleOutlined />
+              ) : (
+                <CloseCircleOutlined />
+              )
+            }
+          >
+            {record.status_match ? "在线匹配" : "在线不匹配"}
+          </Tag>
+          <br />
+          <Tag
+            color={record.dev_code_match ? "success" : "warning"}
+            icon={
+              record.dev_code_match ? (
+                <CheckCircleOutlined />
+              ) : (
+                <ExclamationCircleOutlined />
+              )
+            }
+            style={{ marginTop: 4 }}
+          >
+            {record.dev_code_match ? "设备匹配" : "设备不匹配"}
+          </Tag>
+        </div>
       ),
     },
     {
@@ -293,105 +323,89 @@ const AccountMonitor: React.FC = () => {
     <Card
       title="账号状态监控"
       extra={
-        <Space>
-          <Button
-            icon={<ReloadOutlined />}
-            onClick={fetchData}
-            loading={loading}
-          >
-            刷新
-          </Button>
-          <Popconfirm
-            title="确认同步所有不匹配的账号？"
-            description="将根据Redis中的真实状态更新数据库"
-            onConfirm={() => handleSync(true)}
-            okText="确认"
-            cancelText="取消"
-          >
-            <Button type="primary" icon={<SyncOutlined />} loading={syncing}>
-              同步全部
-            </Button>
-          </Popconfirm>
-        </Space>
+        <Button
+          icon={<ReloadOutlined />}
+          onClick={fetchData}
+          loading={loading}
+        >
+          刷新
+        </Button>
       }
     >
       <AutoAccountSyncManager />
       {data && (
         <>
-          {/* 搜索和排序控件 */}
-          <Card size="small" style={{ marginBottom: 16 }}>
+          {/* 搜索筛选 */}
+          <Card title="搜索筛选" style={{ marginBottom: 16 }}>
             <Row gutter={16} align="middle">
-              <Col span={6}>
-                <Space
-                  direction="vertical"
-                  size="small"
-                  style={{ width: "100%" }}
-                >
-                  <label>按账号搜索:</label>
-                  <Input
-                    placeholder="输入账号名称"
-                    prefix={<SearchOutlined />}
-                    value={searchAccount}
-                    onChange={(e) => {
-                      setSearchAccount(e.target.value);
-                      setCurrentPage(1); // 重置到第一页
-                    }}
-                    allowClear
-                  />
-                </Space>
+              <Col span={5}>
+                <Input
+                  placeholder="账号名称"
+                  value={searchAccount}
+                  onChange={(e) => {
+                    setSearchAccount(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  allowClear
+                />
               </Col>
-              <Col span={6}>
-                <Space
-                  direction="vertical"
-                  size="small"
-                  style={{ width: "100%" }}
-                >
-                  <label>按商户ID搜索:</label>
-                  <Input
-                    placeholder="输入商户ID"
-                    prefix={<SearchOutlined />}
-                    value={searchMerchantId}
-                    onChange={(e) => {
-                      setSearchMerchantId(e.target.value);
-                      setCurrentPage(1); // 重置到第一页
-                    }}
-                    allowClear
-                  />
-                </Space>
+              <Col span={4}>
+                <Input
+                  placeholder="商户ID"
+                  value={searchMerchantId}
+                  onChange={(e) => {
+                    setSearchMerchantId(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  allowClear
+                />
               </Col>
-              <Col span={6}>
-                <Space
-                  direction="vertical"
-                  size="small"
+              <Col span={4}>
+                <Select
+                  placeholder="不匹配类型"
                   style={{ width: "100%" }}
+                  value={mismatchType}
+                  onChange={(value) => {
+                    setMismatchType(value);
+                    setCurrentPage(1);
+                  }}
                 >
-                  <label>按心跳时间排序:</label>
-                  <Select
-                    style={{ width: "100%" }}
-                    placeholder="选择排序方式"
-                    value={sortOrder}
-                    onChange={(value) => setSortOrder(value)}
-                    allowClear
+                  <Select.Option value="status">在线状态不匹配</Select.Option>
+                  <Select.Option value="device">设备编码不匹配</Select.Option>
+                  <Select.Option value="both">两种都不匹配</Select.Option>
+                  <Select.Option value="all">所有不匹配</Select.Option>
+                </Select>
+              </Col>
+              <Col span={4}>
+                <Select
+                  placeholder="心跳时间排序"
+                  style={{ width: "100%" }}
+                  value={sortOrder}
+                  onChange={(value) => setSortOrder(value)}
+                  allowClear
+                >
+                  <Select.Option value="desc">
+                    <SortDescendingOutlined /> 最新优先
+                  </Select.Option>
+                  <Select.Option value="asc">
+                    <SortAscendingOutlined /> 最旧优先
+                  </Select.Option>
+                </Select>
+              </Col>
+              <Col span={7}>
+                <Space>
+                  <Button onClick={resetFilters}>重置</Button>
+                  <Popconfirm
+                    title="确认同步所有不匹配的账号？"
+                    description="将根据Redis中的真实状态更新数据库"
+                    onConfirm={() => handleSync(true)}
+                    okText="确认"
+                    cancelText="取消"
                   >
-                    <Select.Option value="desc">
-                      <SortDescendingOutlined /> 最新优先
-                    </Select.Option>
-                    <Select.Option value="asc">
-                      <SortAscendingOutlined /> 最旧优先
-                    </Select.Option>
-                  </Select>
-                </Space>
-              </Col>
-              <Col span={6}>
-                <Space
-                  direction="vertical"
-                  size="small"
-                  style={{ width: "100%" }}
-                >
-                  <label>&nbsp;</label>
-                  <Button onClick={resetFilters} style={{ width: "100%" }}>
-                    重置筛选
-                  </Button>
+                    <Button type="primary" icon={<SyncOutlined />} loading={syncing}>
+                      同步全部
+                    </Button>
+                  </Popconfirm>
                 </Space>
               </Col>
             </Row>
@@ -434,7 +448,7 @@ const AccountMonitor: React.FC = () => {
           {data.mismatchCount > 0 && (
             <Alert
               message="发现状态不匹配的账号"
-              description={`共有 ${data.mismatchCount} 个账号的数据库状态与Redis状态不一致，建议及时同步`}
+              description={`共有 ${data.mismatchCount} 个账号的数据库状态与Redis状态不一致或设备编码不匹配，建议及时同步`}
               type="warning"
               showIcon
               style={{ marginBottom: 16 }}
@@ -509,25 +523,28 @@ const AccountMonitor: React.FC = () => {
             关闭
           </Button>,
         ]}
-        width={800}
+        width={1000}
       >
         {selectedRecord && (
           <div>
-            <Descriptions title="数据库信息" bordered size="small">
+            <Descriptions title="数据库信息" bordered size="small" column={3}>
               <Descriptions.Item label="账号ID">
                 {selectedRecord.social_account.id}
               </Descriptions.Item>
               <Descriptions.Item label="商户ID">
                 {selectedRecord.social_account.merchant_id}
               </Descriptions.Item>
-              <Descriptions.Item label="账号名称">
-                {selectedRecord.social_account.account}
-              </Descriptions.Item>
-              <Descriptions.Item label="AppUniqueID">
-                {selectedRecord.social_account.app_unique_id}
-              </Descriptions.Item>
               <Descriptions.Item label="平台ID">
                 {selectedRecord.social_account.platform_id}
+              </Descriptions.Item>
+              <Descriptions.Item label="账号名称" span={2}>
+                {selectedRecord.social_account.account}
+              </Descriptions.Item>
+              <Descriptions.Item label="设备编码">
+                {selectedRecord.social_account.dev_code || "未设置"}
+              </Descriptions.Item>
+              <Descriptions.Item label="AppUniqueID" span={3}>
+                {selectedRecord.social_account.app_unique_id}
               </Descriptions.Item>
               <Descriptions.Item label="账号状态">
                 <Tag
@@ -566,6 +583,7 @@ const AccountMonitor: React.FC = () => {
                 title="Redis信息"
                 bordered
                 size="small"
+                column={3}
                 style={{ marginTop: 16 }}
               >
                 <Descriptions.Item label="在线状态">
@@ -577,11 +595,30 @@ const AccountMonitor: React.FC = () => {
                     {selectedRecord.redis_info.online ? "在线" : "离线"}
                   </Tag>
                 </Descriptions.Item>
-                <Descriptions.Item label="设备编码">
+                <Descriptions.Item label="设备编码(Redis)">
                   {selectedRecord.redis_info.bdClientNo || "未知"}
                 </Descriptions.Item>
                 <Descriptions.Item label="插件版本">
                   {selectedRecord.redis_info.pluginVersion || "未知"}
+                </Descriptions.Item>
+                <Descriptions.Item label="设备编码匹配" span={3}>
+                  <Tag
+                    color={selectedRecord.dev_code_match ? "success" : "warning"}
+                    icon={
+                      selectedRecord.dev_code_match ? (
+                        <CheckCircleOutlined />
+                      ) : (
+                        <ExclamationCircleOutlined />
+                      )
+                    }
+                  >
+                    {selectedRecord.dev_code_match ? "匹配" : "不匹配"}
+                  </Tag>
+                  {!selectedRecord.dev_code_match && (
+                    <div style={{ color: "#ff7875", fontSize: "12px", marginTop: "4px" }}>
+                      数据库: {selectedRecord.social_account.dev_code || "未设置"} ≠ Redis: {selectedRecord.redis_info.bdClientNo || "未知"}
+                    </div>
+                  )}
                 </Descriptions.Item>
                 <Descriptions.Item label="登录时间">
                   {selectedRecord.redis_info.loginTimeFormatted}
@@ -601,7 +638,7 @@ const AccountMonitor: React.FC = () => {
                 <Descriptions.Item label="平台ID">
                   {selectedRecord.redis_info.platformId}
                 </Descriptions.Item>
-                <Descriptions.Item label="第三方应用">
+                <Descriptions.Item label="第三方应用" span={2}>
                   {selectedRecord.redis_info.thirdApp}
                 </Descriptions.Item>
               </Descriptions>

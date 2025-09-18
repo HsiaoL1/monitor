@@ -55,15 +55,17 @@ type SocialAccount struct {
 	AppUniqueID   string `gorm:"column:app_unique_id" json:"app_unique_id"`
 	AccountStatus int8   `gorm:"column:account_status" json:"account_status"` // 0:禁用,1:启用
 	PlatformID    int64  `gorm:"column:platform_id" json:"platform_id"`
-	OnlineStatus  int8   `gorm:"column:online_status" json:"online_status"` // 0:离线,1:在线,2上线中，3下线中
+	OnlineStatus  int8   `gorm:"column:online_status" json:"online_status"`   // 0:离线,1:在线,2上线中，3下线中
+	DevCode       string `gorm:"column:dev_code" json:"dev_code"`             // 设备编码
 }
 
 type AccountStatusMismatch struct {
-	SocialAccount SocialAccount  `json:"social_account"`
-	RedisInfo     UserOnlineInfo `json:"redis_info"`
-	IsHBTimeOut   bool           `json:"is_hb_time_out"`
-	RedisExists   bool           `json:"redis_exists"`
-	StatusMatch   bool           `json:"status_match"`
+	SocialAccount   SocialAccount  `json:"social_account"`
+	RedisInfo       UserOnlineInfo `json:"redis_info"`
+	IsHBTimeOut     bool           `json:"is_hb_time_out"`
+	RedisExists     bool           `json:"redis_exists"`
+	StatusMatch     bool           `json:"status_match"`
+	DevCodeMatch    bool           `json:"dev_code_match"`    // 设备编码是否匹配
 }
 
 type RedisClient struct {
@@ -196,7 +198,7 @@ func GetAccountMismatchHandler(c *gin.Context) {
 	var accounts []SocialAccount
 	if err := db.G.Table("social_accounts").
 		Where("deleted_at IS NULL").
-		Select("id, merchant_id, account, app_unique_id, platform_id, online_status, account_status").
+		Select("id, merchant_id, account, app_unique_id, platform_id, online_status, account_status, dev_code").
 		Scan(&accounts).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
@@ -235,6 +237,7 @@ func GetAccountMismatchHandler(c *gin.Context) {
 			if err := json.Unmarshal([]byte(redisData), &redisInfo); err != nil {
 				mismatch.StatusMatch = false
 				mismatch.IsHBTimeOut = false
+				mismatch.DevCodeMatch = true // 解析失败时设为匹配，避免误报
 			} else {
 				mismatch.RedisInfo = redisInfo
 				// 判断心跳是否超时
@@ -251,15 +254,19 @@ func GetAccountMismatchHandler(c *gin.Context) {
 				} else {
 					mismatch.StatusMatch = (dbOnline == redisInfo.Online)
 				}
+
+				// 比较设备编码是否匹配
+				mismatch.DevCodeMatch = (account.DevCode == redisInfo.BdClientNo)
 			}
 		} else {
 			// Redis中不存在该用户，如果数据库中状态为在线则为不匹配
 			mismatch.StatusMatch = (account.OnlineStatus != 1)
 			mismatch.IsHBTimeOut = false
+			mismatch.DevCodeMatch = true // Redis不存在时设为匹配，避免误报
 		}
 
-		// 只返回状态不匹配的记录
-		if !mismatch.StatusMatch {
+		// 返回状态不匹配或设备编码不匹配的记录
+		if !mismatch.StatusMatch || !mismatch.DevCodeMatch {
 			mismatches = append(mismatches, mismatch)
 		}
 	}
@@ -306,7 +313,7 @@ func SyncAccountStatusHandler(c *gin.Context) {
 		var accounts []SocialAccount
 		if err := db.G.Table("social_accounts").
 			Where("deleted_at IS NULL").
-			Select("id, merchant_id, account, app_unique_id, platform_id, online_status, account_status").
+			Select("id, merchant_id, account, app_unique_id, platform_id, online_status, account_status, dev_code").
 			Scan(&accounts).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"success": false,
@@ -347,7 +354,7 @@ func syncSingleAccount(appUniqueID string, rdb *redis.Client) error {
 	var account SocialAccount
 	if err := db.G.Table("social_accounts").
 		Where("app_unique_id = ? AND deleted_at IS NULL", appUniqueID).
-		Select("id, merchant_id, account, app_unique_id, platform_id, online_status, account_status").
+		Select("id, merchant_id, account, app_unique_id, platform_id, online_status, account_status, dev_code").
 		First(&account).Error; err != nil {
 		return fmt.Errorf("account not found: %v", err)
 	}

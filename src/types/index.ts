@@ -108,6 +108,7 @@ export interface SocialAccount {
   account_status: number; // 0:禁用,1:启用
   platform_id: number;
   online_status: number; // 0:离线,1:在线,2上线中，3下线中
+  dev_code: string; // 设备编码
 }
 
 export interface AccountStatusMismatch {
@@ -116,6 +117,7 @@ export interface AccountStatusMismatch {
   is_hb_time_out: boolean;
   redis_exists: boolean;
   status_match: boolean;
+  dev_code_match: boolean; // 设备编码是否匹配
 }
 
 // Proxy monitoring types
