@@ -1,7 +1,6 @@
 package api
 
 import (
-	"control/go_server/db"
 	"control/go_server/internal/storage"
 	"net/http"
 	"os"
@@ -32,9 +31,11 @@ func SetupRouter() *gin.Engine {
 	// Session middleware
 	router.Use(SessionsMiddleware())
 
-	// Initialize CI/CD store
-	cicdStore := storage.NewCICDStore(db.G)
-	cicdStore.AutoMigrate()
+	// Initialize CI/CD store with SQLite
+	cicdStore := storage.NewCICDStore()
+	if err := cicdStore.AutoMigrate(); err != nil {
+		panic("Failed to migrate CI/CD database: " + err.Error())
+	}
 	cicdHandler := NewCICDHandler(cicdStore)
 
 	// API Routes
@@ -54,6 +55,7 @@ func SetupRouter() *gin.Engine {
 			auth.GET("/system-metrics", SystemMetricsHandler)
 			auth.GET("/system-metrics/history", SystemMetricsHistoryHandler)
 			auth.GET("/system-metrics/stats", MetricsStatsHandler)
+			auth.GET("/system-metrics/auto-restart-history", AutoRestartHistoryHandler)
 			auth.GET("/service-status", ServiceStatusHandler)
 			auth.GET("/services-status", ServicesStatusHandler)
 			auth.POST("/service/start", ServiceStartHandler)
@@ -144,7 +146,7 @@ func staticFileServer(fsRoot string) gin.HandlerFunc {
 		if strings.HasPrefix(c.Request.URL.Path, "/api") || c.Request.Method != http.MethodGet {
 			c.Next()
 			return
-	}
+		}
 
 		filePath := filepath.Join(fsRoot, c.Request.URL.Path)
 

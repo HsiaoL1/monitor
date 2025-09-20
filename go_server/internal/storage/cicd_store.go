@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"control/go_server/db"
 	"control/go_server/internal/models"
 	"time"
 
@@ -11,8 +12,8 @@ type CICDStore struct {
 	db *gorm.DB
 }
 
-func NewCICDStore(db *gorm.DB) *CICDStore {
-	return &CICDStore{db: db}
+func NewCICDStore() *CICDStore {
+	return &CICDStore{db: db.CicdDB}
 }
 
 // AutoMigrate creates the CI/CD tables

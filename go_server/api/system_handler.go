@@ -84,6 +84,9 @@ func collectAndStoreMetrics() {
 				
 				// Store metrics in memory
 				metricsStore.AddMetric(s.Name, totalCpu, totalMemory)
+
+				// Check memory threshold and auto-restart if needed
+				utils.CheckMemoryAndRestart(s.Name, totalMemory)
 			}
 		}(service)
 	}
@@ -165,6 +168,11 @@ func SystemMetricsHandler(c *gin.Context) {
 						}
 					}
 				}
+
+				// Add auto-restart configuration and status
+				metric["memoryThresholdMB"] = s.MemoryThresholdMB
+				metric["autoRestart"] = s.AutoRestart
+				metric["inCooldown"] = utils.IsInCooldown(s.Name)
 			}
 
 			mu.Lock()
@@ -447,4 +455,25 @@ func SystemMetricsHistoryHandler(c *gin.Context) {
 func MetricsStatsHandler(c *gin.Context) {
 	stats := metricsStore.GetStats()
 	c.JSON(http.StatusOK, stats)
+}
+
+// AutoRestartHistoryHandler returns the auto-restart history for all services
+func AutoRestartHistoryHandler(c *gin.Context) {
+	history := utils.GetRestartHistory()
+
+	// Format the response with human-readable timestamps
+	formattedHistory := make(map[string]gin.H)
+	for serviceName, lastRestart := range history {
+		formattedHistory[serviceName] = gin.H{
+			"lastRestart":          lastRestart.UnixMilli(),
+			"lastRestartFormatted": lastRestart.Format("2006-01-02 15:04:05"),
+			"timeSinceRestart":     time.Since(lastRestart).String(),
+			"inCooldown":           utils.IsInCooldown(serviceName),
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"restartHistory": formattedHistory,
+		"timestamp":      time.Now().UnixMilli(),
+	})
 }

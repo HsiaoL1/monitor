@@ -49,9 +49,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize database
+	// Initialize MySQL database for monitoring
 	if err := db.InitGMySQL(sqlconn); err != nil {
-		fmt.Println("Error initializing database:", err)
+		fmt.Println("Error initializing MySQL database:", err)
+		os.Exit(1)
+	}
+
+	// Initialize SQLite database for CI/CD functionality
+	if err := db.InitCicdSQLite("./data/cicd.db"); err != nil {
+		fmt.Println("Error initializing CI/CD SQLite database:", err)
 		os.Exit(1)
 	}
 

@@ -37,14 +37,14 @@ func LoadConfig(loginPath string) error {
 
 	// Initialize services
 	Conf.Services = []models.Service{
-		{Name: "ims_agent_api", Path: "/opt/ims_agent_api", DeployScript: "./deploy.sh"},
-		{Name: "ims_server_api", Path: "/opt/ims_server_api", DeployScript: "./deploy.sh"},
-		{Name: "ims_server_active", Path: "/opt/ims_server_active", DeployScript: "./deploy.sh"},
-		{Name: "ims_server_send", Path: "/opt/ims_server_send/cmd/ims_server_send", DeployScript: "./deploy.sh"},
-		{Name: "ims_server_task", Path: "/opt/ims_server_task/cmd/ims_server_task", DeployScript: "./deploy.sh"},
-		{Name: "ims_server_web", Path: "/opt/ims_server_web/cmd/server", DeployScript: "./deploy.sh", PprofURL: "http://119.8.54.133:9090/debug/pprof/"},
-		{Name: "ims_server_ws", Path: "/opt/ims_server_ws/cmd/server", DeployScript: "./deploy.sh", PprofURL: "http://119.8.54.133:9000/debug/pprof/"},
-		{Name: "ims_server_mq", Path: "/opt/ims_server_mq/cmd/mq", DeployScript: "./deploy.sh", PprofURL: "http://119.8.54.133:9002/debug/pprof/"},
+		{Name: "ims_agent_api", Path: "/opt/ims_agent_api", DeployScript: "./deploy.sh", MemoryThresholdMB: 15360, AutoRestart: true},
+		{Name: "ims_server_api", Path: "/opt/ims_server_api", DeployScript: "./deploy.sh", MemoryThresholdMB: 15360, AutoRestart: true},
+		{Name: "ims_server_active", Path: "/opt/ims_server_active", DeployScript: "./deploy.sh", MemoryThresholdMB: 15360, AutoRestart: true},
+		{Name: "ims_server_send", Path: "/opt/ims_server_send/cmd/ims_server_send", DeployScript: "./deploy.sh", MemoryThresholdMB: 15360, AutoRestart: true},
+		{Name: "ims_server_task", Path: "/opt/ims_server_task/cmd/ims_server_task", DeployScript: "./deploy.sh", MemoryThresholdMB: 15360, AutoRestart: true},
+		{Name: "ims_server_web", Path: "/opt/ims_server_web/cmd/server", DeployScript: "./deploy.sh", PprofURL: "http://119.8.54.133:9090/debug/pprof/", MemoryThresholdMB: 15360, AutoRestart: true},
+		{Name: "ims_server_ws", Path: "/opt/ims_server_ws/cmd/server", DeployScript: "./deploy.sh", PprofURL: "http://119.8.54.133:9000/debug/pprof/", MemoryThresholdMB: 15360, AutoRestart: true},
+		{Name: "ims_server_mq", Path: "/opt/ims_server_mq/cmd/mq", DeployScript: "./deploy.sh", PprofURL: "http://119.8.54.133:9002/debug/pprof/", MemoryThresholdMB: 15360, AutoRestart: true},
 	}
 
 	// Initialize Redis config

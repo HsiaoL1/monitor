@@ -10,10 +10,12 @@ type LoginCredentials struct {
 
 // Service defines a manageable service
 type Service struct {
-	Name         string `json:"serviceName"`
-	Path         string `json:"servicePath"`
-	DeployScript string `json:"deployScript"`
-	PprofURL     string `json:"pprofUrl,omitempty"`
+	Name              string  `json:"serviceName"`
+	Path              string  `json:"servicePath"`
+	DeployScript      string  `json:"deployScript"`
+	PprofURL          string  `json:"pprofUrl,omitempty"`
+	MemoryThresholdMB float64 `json:"memoryThresholdMB,omitempty"` // Memory threshold in MB for auto-restart
+	AutoRestart       bool    `json:"autoRestart,omitempty"`       // Enable auto-restart when threshold is exceeded
 }
 
 // Environment represents deployment environment
