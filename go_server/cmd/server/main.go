@@ -57,8 +57,9 @@ func main() {
 
 	// Initialize SQLite database for CI/CD functionality
 	if err := db.InitCicdSQLite("./data/cicd.db"); err != nil {
-		fmt.Println("Error initializing CI/CD SQLite database:", err)
-		os.Exit(1)
+		fmt.Println("Warning: CI/CD SQLite database initialization failed:", err)
+		fmt.Println("Falling back to JSON file storage for CI/CD data")
+		// Don't exit, let the JSON store handle CI/CD data
 	}
 
 	// Setup router

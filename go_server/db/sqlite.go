@@ -7,6 +7,7 @@ import (
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	_ "modernc.org/sqlite" // Pure Go SQLite driver
 )
 
 // CicdDB is the SQLite database connection for CI/CD functionality
@@ -20,7 +21,7 @@ func InitCicdSQLite(dbPath string) error {
 		return err
 	}
 
-	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(dbPath+"?_pragma=foreign_keys(1)"), &gorm.Config{})
 	if err != nil {
 		return err
 	}
