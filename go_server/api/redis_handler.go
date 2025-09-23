@@ -23,8 +23,8 @@ import (
 
 const (
 	onlineHashKey           = "ims_server_ws:online"
-	heartbeatTimeout        = 15 * 60 // 60 seconds
-	HeartbeatTimeoutSeconds = 15 * 60 * time.Second
+	heartbeatTimeout        = 10 * 60 // 60 seconds
+	HeartbeatTimeoutSeconds = 10 * 60 * time.Second
 )
 
 var accountSyncLogStorage *storage.AccountSyncLogStorage
@@ -55,17 +55,17 @@ type SocialAccount struct {
 	AppUniqueID   string `gorm:"column:app_unique_id" json:"app_unique_id"`
 	AccountStatus int8   `gorm:"column:account_status" json:"account_status"` // 0:禁用,1:启用
 	PlatformID    int64  `gorm:"column:platform_id" json:"platform_id"`
-	OnlineStatus  int8   `gorm:"column:online_status" json:"online_status"`   // 0:离线,1:在线,2上线中，3下线中
-	DevCode       string `gorm:"column:dev_code" json:"dev_code"`             // 设备编码
+	OnlineStatus  int8   `gorm:"column:online_status" json:"online_status"` // 0:离线,1:在线,2上线中，3下线中
+	DevCode       string `gorm:"column:dev_code" json:"dev_code"`           // 设备编码
 }
 
 type AccountStatusMismatch struct {
-	SocialAccount   SocialAccount  `json:"social_account"`
-	RedisInfo       UserOnlineInfo `json:"redis_info"`
-	IsHBTimeOut     bool           `json:"is_hb_time_out"`
-	RedisExists     bool           `json:"redis_exists"`
-	StatusMatch     bool           `json:"status_match"`
-	DevCodeMatch    bool           `json:"dev_code_match"`    // 设备编码是否匹配
+	SocialAccount SocialAccount  `json:"social_account"`
+	RedisInfo     UserOnlineInfo `json:"redis_info"`
+	IsHBTimeOut   bool           `json:"is_hb_time_out"`
+	RedisExists   bool           `json:"redis_exists"`
+	StatusMatch   bool           `json:"status_match"`
+	DevCodeMatch  bool           `json:"dev_code_match"` // 设备编码是否匹配
 }
 
 type RedisClient struct {
@@ -504,7 +504,7 @@ func syncSingleAccount(appUniqueID string, rdb *redis.Client) error {
 
 		result := db.G.Table("social_accounts").
 			Where("app_unique_id = ? AND deleted_at IS NULL", appUniqueID).
-			Updates(updateFields)
+			Update("online_status", newOnlineStatus)
 
 		if result.Error != nil {
 			syncSuccess = false
