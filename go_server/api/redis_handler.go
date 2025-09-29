@@ -23,8 +23,8 @@ import (
 
 const (
 	onlineHashKey           = "ims_server_ws:online"
-	heartbeatTimeout        = 10 * 60 // 60 seconds
-	HeartbeatTimeoutSeconds = 10 * 60 * time.Second
+	heartbeatTimeout        = 5 * 60 // 60 seconds
+	HeartbeatTimeoutSeconds = 5 * 60 * time.Second
 )
 
 var accountSyncLogStorage *storage.AccountSyncLogStorage
