@@ -258,7 +258,7 @@ func executeAccountRestart() {
 			log.Printf("警告: 账号 %s 在1小时内重启次数超过6次，将被标记为异常。", userKey)
 
 			// Update account_status to 4 (abnormal) in the database
-			if err := db.G.Table("social_accounts").Where("app_unique_id = ?", userKey).Update("account_status", 4).Error; err != nil {
+			if err := db.G.Table("social_accounts").Where("app_unique_id = ?", userKey).Where("deleted_at IS NULL").Update("account_status", 4).Error; err != nil {
 				log.Printf("错误: 更新账号 %s 状态为异常失败: %v", userKey, err)
 			} else {
 				log.Printf("成功: 账号 %s 已被标记为异常 (account_status = 4)。", userKey)
