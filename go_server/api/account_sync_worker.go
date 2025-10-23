@@ -104,7 +104,7 @@ func autoAccountRestartWorker(ctx context.Context) {
 	executeAccountRestart()
 
 	// 每30分钟执行一次检测（可根据需要调整）
-	ticker := time.NewTicker(30 * time.Minute)
+	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
 	for {
@@ -190,7 +190,7 @@ func executeAccountRestart() {
 
 	// 查找符合重启条件的账号
 	var restartAccounts []RestartAccountInfo
-	currentTime := time.Now().Unix()
+	// currentTime := time.Now().Unix()
 
 	for userKey, userDataStr := range allUsersData {
 		// 1. 检查是否为WhatsApp账号格式
@@ -209,9 +209,9 @@ func executeAccountRestart() {
 		}
 
 		// 3. 检查心跳是否在3分钟内（180秒）
-		if currentTime-onlineInfo.HeartbeatTime > 180 {
-			continue
-		}
+		// if currentTime-onlineInfo.HeartbeatTime > 180 {
+		// 	continue
+		// }
 
 		// 4. 检查设备编码是否存在且对应的设备在线状态
 		if onlineInfo.BdClientNo == "" {
@@ -219,7 +219,7 @@ func executeAccountRestart() {
 		}
 
 		// 5. 检查设备是否有对应的在线连接且在线
-		if v, ok := keyMap[onlineInfo.BdClientNo]; ok && v.Online && v.HeartbeatTime > currentTime-180 {
+		if v, ok := keyMap[onlineInfo.BdClientNo]; ok && v.Online {
 			continue
 		}
 
