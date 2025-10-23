@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { Layout, Menu, Button, message } from 'antd';
-import { DashboardOutlined, ControlOutlined, CodeOutlined, DatabaseOutlined, UserOutlined, GlobalOutlined, LogoutOutlined, BarChartOutlined, LineChartOutlined, HistoryOutlined, MonitorOutlined, RocketOutlined, BranchesOutlined, FileTextOutlined, ToolOutlined, LaptopOutlined } from '@ant-design/icons';
+import { DashboardOutlined, ControlOutlined, CodeOutlined, DatabaseOutlined, UserOutlined, GlobalOutlined, LogoutOutlined, BarChartOutlined, LineChartOutlined, HistoryOutlined, MonitorOutlined, RocketOutlined, BranchesOutlined, FileTextOutlined, ToolOutlined, LaptopOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import ResourceMonitor from './components/ResourceMonitor';
 import ResourceChart from './components/ResourceChart';
@@ -18,6 +18,7 @@ import LogAggregation from './components/ops/LogAggregation';
 import DeviceMonitor from './components/DeviceMonitor';
 import Login from './components/Login';
 import { checkAuth, logout } from './services/api';
+import AutoAccountRestartManager from './components/AutoAccountRestartManager';
 
 const { Header, Sider, Content } = Layout;
 
@@ -31,7 +32,7 @@ const AppContent: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     const path = location.pathname;
     if (path === '/' || path === '/resource-chart') {
       setOpenKeys(['resource']);
-    } else if (path === '/account-monitor' || path === '/account-sync-log') {
+    } else if (path === '/account-monitor' || path === '/account-sync-log' || path === '/account-restart') {
       setOpenKeys(['account']);
     } else if (path === '/ops' || path === '/ops/log-aggregation') {
       setOpenKeys(['ops']);
@@ -114,6 +115,11 @@ const AppContent: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
           key: '/account-sync-log',
           icon: <HistoryOutlined />,
           label: '同步记录',
+        },
+        {
+          key: '/account-restart',
+          icon: <PlayCircleOutlined />,
+          label: '自动重启',
         }
       ]
     },
@@ -189,6 +195,7 @@ const AppContent: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
               <Route path="/device-monitor" element={<DeviceMonitor />} />
               <Route path="/account-monitor" element={<AccountMonitor />} />
               <Route path="/account-sync-log" element={<AccountSyncLog />} />
+              <Route path="/account-restart" element={<AutoAccountRestartManager />} />
               <Route path="/proxy-monitor" element={<ProxyMonitor />} />
               <Route path="/proxy-replace-log" element={<ProxyReplaceLog />} />
               <Route path="/ci-cd" element={<CICDManager />} />

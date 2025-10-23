@@ -30,7 +30,7 @@ import {
 } from "@ant-design/icons";
 import { fetchAccountMismatch, syncAccountStatus } from "../services/api";
 import { AccountStatusMismatch } from "../types";
-import AutoAccountSyncManager from "./AutoAccountSyncManager";
+
 
 const AccountMonitor: React.FC = () => {
   const [loading, setLoading] = useState(false);
@@ -160,7 +160,13 @@ const AccountMonitor: React.FC = () => {
     }
 
     return filtered;
-  }, [data?.mismatches, searchAccount, searchMerchantId, mismatchType, sortOrder]);
+  }, [
+    data?.mismatches,
+    searchAccount,
+    searchMerchantId,
+    mismatchType,
+    sortOrder,
+  ]);
 
   const getOnlineStatusText = (status: number) => {
     const statusMap: Record<number, { text: string; color: string }> = {
@@ -323,16 +329,11 @@ const AccountMonitor: React.FC = () => {
     <Card
       title="账号状态监控"
       extra={
-        <Button
-          icon={<ReloadOutlined />}
-          onClick={fetchData}
-          loading={loading}
-        >
+        <Button icon={<ReloadOutlined />} onClick={fetchData} loading={loading}>
           刷新
         </Button>
       }
     >
-      <AutoAccountSyncManager />
       {data && (
         <>
           {/* 搜索筛选 */}
@@ -402,7 +403,11 @@ const AccountMonitor: React.FC = () => {
                     okText="确认"
                     cancelText="取消"
                   >
-                    <Button type="primary" icon={<SyncOutlined />} loading={syncing}>
+                    <Button
+                      type="primary"
+                      icon={<SyncOutlined />}
+                      loading={syncing}
+                    >
                       同步全部
                     </Button>
                   </Popconfirm>
@@ -603,7 +608,9 @@ const AccountMonitor: React.FC = () => {
                 </Descriptions.Item>
                 <Descriptions.Item label="设备编码匹配" span={3}>
                   <Tag
-                    color={selectedRecord.dev_code_match ? "success" : "warning"}
+                    color={
+                      selectedRecord.dev_code_match ? "success" : "warning"
+                    }
                     icon={
                       selectedRecord.dev_code_match ? (
                         <CheckCircleOutlined />
@@ -615,8 +622,16 @@ const AccountMonitor: React.FC = () => {
                     {selectedRecord.dev_code_match ? "匹配" : "不匹配"}
                   </Tag>
                   {!selectedRecord.dev_code_match && (
-                    <div style={{ color: "#ff7875", fontSize: "12px", marginTop: "4px" }}>
-                      数据库: {selectedRecord.social_account.dev_code || "未设置"} ≠ Redis: {selectedRecord.redis_info.bdClientNo || "未知"}
+                    <div
+                      style={{
+                        color: "#ff7875",
+                        fontSize: "12px",
+                        marginTop: "4px",
+                      }}
+                    >
+                      数据库:{" "}
+                      {selectedRecord.social_account.dev_code || "未设置"} ≠
+                      Redis: {selectedRecord.redis_info.bdClientNo || "未知"}
                     </div>
                   )}
                 </Descriptions.Item>
