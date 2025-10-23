@@ -81,12 +81,12 @@ func SetupRouter() *gin.Engine {
 				accountGroup.GET("/sync-log", GetAccountSyncLogHandler)
 				accountGroup.GET("/sync-log/download", DownloadAccountSyncLogHandler)
 
-				// Auto-sync routes
-				autoSyncGroup := accountGroup.Group("/auto-sync")
+				// Auto-restart routes
+				autoRestartGroup := accountGroup.Group("/auto-restart")
 				{
-					autoSyncGroup.POST("/start", StartAutoAccountSyncHandler)
-					autoSyncGroup.POST("/stop", StopAutoAccountSyncHandler)
-					autoSyncGroup.GET("/status", GetAutoAccountSyncStatusHandler)
+					autoRestartGroup.POST("/start", StartAutoAccountRestartHandler)
+					autoRestartGroup.POST("/stop", StopAutoAccountRestartHandler)
+					autoRestartGroup.GET("/status", GetAutoAccountRestartStatusHandler)
 				}
 			}
 

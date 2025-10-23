@@ -70,7 +70,6 @@ type AccountStatusMismatch struct {
 
 type RedisClient struct {
 	db  *redis.Client
-	mu  sync.Mutex
 	ctx context.Context
 }
 
@@ -82,10 +81,8 @@ func NewRedisClient(db *redis.Client, ctx context.Context) *RedisClient {
 }
 
 // GetHashFieldString 从 Hash 中获取指定字段的原始字符串值
+// Redis 客户端本身是并发安全的，不需要额外的互斥锁
 func (r *RedisClient) GetHashFieldString(hashKey, field string) (string, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	// 获取字段值
 	value, err := r.db.HGet(r.ctx, hashKey, field).Result()
 	if err != nil {
@@ -350,6 +347,32 @@ func SyncAccountStatusHandler(c *gin.Context) {
 
 // syncSingleAccount 同步单个账号的状态
 func syncSingleAccount(appUniqueID string, rdb *redis.Client) error {
+	// 使用 Redis 分布式锁防止并发同步冲突
+	lockKey := fmt.Sprintf("sync_lock:%s", appUniqueID)
+	lockValue := fmt.Sprintf("%d", time.Now().UnixNano())
+
+	// 尝试获取锁，超时时间 10 秒
+	locked, err := rdb.SetNX(context.Background(), lockKey, lockValue, 10*time.Second).Result()
+	if err != nil {
+		return fmt.Errorf("failed to acquire lock: %v", err)
+	}
+	if !locked {
+		return fmt.Errorf("account sync already in progress, skipping")
+	}
+
+	// 确保释放锁
+	defer func() {
+		// 使用 Lua 脚本确保只删除自己持有的锁
+		script := `
+			if redis.call("get", KEYS[1]) == ARGV[1] then
+				return redis.call("del", KEYS[1])
+			else
+				return 0
+			end
+		`
+		rdb.Eval(context.Background(), script, []string{lockKey}, lockValue)
+	}()
+
 	// 首先获取账号信息
 	var account SocialAccount
 	if err := db.G.Table("social_accounts").
@@ -437,7 +460,8 @@ func syncSingleAccount(appUniqueID string, rdb *redis.Client) error {
 				// Redis显示在线且心跳正常
 				newOnlineStatus = 1
 				reason = "Redis显示在线且心跳正常，同步数据库为在线"
-				shouldUpdateDB = (account.OnlineStatus != 1)
+				// 即使 online_status 相同，也可能需要更新其他字段（dev_code、plugin_version等）
+				shouldUpdateDB = (account.OnlineStatus != 1) || (newDevCode != "" && newDevCode != account.DevCode) || (newPluginVersion != "")
 			} else if redisInfo.Online && isHeartbeatTimeout {
 				// Redis显示在线但心跳超时，双方都设为离线
 				newOnlineStatus = 0
@@ -483,9 +507,11 @@ func syncSingleAccount(appUniqueID string, rdb *redis.Client) error {
 	if shouldUpdateDB {
 		// 构建更新字段映射
 		updateFields := map[string]any{
-			"online_status":  newOnlineStatus,
-			"plugin_version": newPluginVersion,
+			"online_status": newOnlineStatus,
 		}
+
+		// 总是更新 plugin_version，即使为空（允许清空）
+		updateFields["plugin_version"] = newPluginVersion
 
 		// 如果有新的BdClientNo，同步到dev_code
 		if newDevCode != "" {
@@ -502,9 +528,10 @@ func syncSingleAccount(appUniqueID string, rdb *redis.Client) error {
 			updateFields["cloud_device_id"] = newCloudDeviceID
 		}
 
+		// 使用 Updates 方法更新所有字段，而不是只更新 online_status
 		result := db.G.Table("social_accounts").
 			Where("app_unique_id = ? AND deleted_at IS NULL", appUniqueID).
-			Update("online_status", newOnlineStatus)
+			Updates(updateFields)
 
 		if result.Error != nil {
 			syncSuccess = false
@@ -522,12 +549,32 @@ func syncSingleAccount(appUniqueID string, rdb *redis.Client) error {
 			redisInfo.Online = false
 			updatedRedisData, err := json.Marshal(redisInfo)
 			if err == nil {
-				err = rdb.HSet(context.Background(), onlineHashKey, appUniqueID, updatedRedisData).Err()
-				if err != nil {
-					// Redis更新失败，但数据库已更新，记录警告
-					reason += " (Redis更新失败: " + err.Error() + ")"
-				} else {
-					reason += " (已同步更新Redis)"
+				// 尝试更新 Redis，最多重试 3 次
+				var redisUpdateErr error
+				for retryCount := 0; retryCount < 3; retryCount++ {
+					redisUpdateErr = rdb.HSet(context.Background(), onlineHashKey, appUniqueID, updatedRedisData).Err()
+					if redisUpdateErr == nil {
+						reason += " (已同步更新Redis)"
+						break
+					}
+					// 短暂延迟后重试
+					time.Sleep(time.Millisecond * 100 * time.Duration(retryCount+1))
+				}
+
+				if redisUpdateErr != nil {
+					// Redis更新失败，即使重试后仍失败
+					// 记录警告，并考虑回滚数据库更新以保持一致性
+					reason += fmt.Sprintf(" (Redis更新失败(重试3次): %s)", redisUpdateErr.Error())
+					log.Printf("WARNING: Redis update failed after retries for account %s, database already updated. Manual intervention may be needed.", appUniqueID)
+
+					// 可选：回滚数据库更新以保持一致性
+					// 这取决于业务需求，是否允许数据库和Redis短暂不一致
+					// rollbackErr := db.G.Table("social_accounts").
+					// 	Where("app_unique_id = ? AND deleted_at IS NULL", appUniqueID).
+					// 	Update("online_status", beforeStatus).Error
+					// if rollbackErr != nil {
+					// 	log.Printf("ERROR: Failed to rollback database update: %v", rollbackErr)
+					// }
 				}
 			}
 		}
