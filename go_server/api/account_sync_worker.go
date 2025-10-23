@@ -236,6 +236,39 @@ func executeAccountRestart() {
 			continue
 		}
 
+		// --- Start of new logic: Rate limit check ---
+		// Use a background context for these short-lived Redis operations
+		redisCtx := context.Background()
+		redisKey := fmt.Sprintf("account:restart:count:%s", userKey)
+
+		// Increment and get the current count
+		count, err := rdb.Incr(redisCtx, redisKey).Result()
+		if err != nil {
+			log.Printf("错误: Redis INCR 失败 for key %s: %v", redisKey, err)
+			continue // Skip this account on Redis error
+		}
+
+		// If this is the first increment in the 1-hour window, set the expiry
+		if count == 1 {
+			rdb.Expire(redisCtx, redisKey, 15*time.Minute)
+		}
+
+		// If count exceeds 6, mark as abnormal and skip
+		if count > 6 {
+			log.Printf("警告: 账号 %s 在1小时内重启次数超过6次，将被标记为异常。", userKey)
+
+			// Update account_status to 4 (abnormal) in the database
+			if err := db.G.Table("social_accounts").Where("app_unique_id = ?", userKey).Update("account_status", 4).Error; err != nil {
+				log.Printf("错误: 更新账号 %s 状态为异常失败: %v", userKey, err)
+			} else {
+				log.Printf("成功: 账号 %s 已被标记为异常 (account_status = 4)。", userKey)
+				// On successful update, delete the redis counter to allow for manual reset
+				rdb.Del(redisCtx, redisKey)
+			}
+			continue // Do not add to the restart list
+		}
+		// --- End of new logic ---
+
 		// 确定设备类型
 		devType := 0
 		if isValidBaiduYun(onlineInfo.BdClientNo) {
