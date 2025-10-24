@@ -57,6 +57,7 @@ type SocialAccount struct {
 	PlatformID    int64  `gorm:"column:platform_id" json:"platform_id"`
 	OnlineStatus  int8   `gorm:"column:online_status" json:"online_status"` // 0:离线,1:在线,2上线中，3下线中
 	DevCode       string `gorm:"column:dev_code" json:"dev_code"`           // 设备编码
+	AccountType   int    `gorm:"column:account_type" json:"account_type"`
 }
 
 type AccountStatusMismatch struct {

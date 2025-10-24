@@ -145,7 +145,7 @@ func executeAccountRestart() {
 	var accounts []SocialAccount
 	if err := db.G.Table("social_accounts").
 		Where("deleted_at IS NULL AND dev_code IS NOT NULL AND dev_code != '' AND account_status = 1").
-		Select("id, merchant_id, account, app_unique_id, platform_id, online_status, account_status, dev_code").
+		Select("id, merchant_id, account, app_unique_id, platform_id, online_status, account_status, dev_code,account_type").
 		Scan(&accounts).Error; err != nil {
 		log.Printf("错误: 获取社媒账号失败: %v", err)
 		autoRestartTaskMutex.Lock()
@@ -190,112 +190,113 @@ func executeAccountRestart() {
 
 	// 查找符合重启条件的账号
 	var restartAccounts []RestartAccountInfo
-	// currentTime := time.Now().Unix()
 
-	for userKey, userDataStr := range allUsersData {
-		// 1. 检查是否为WhatsApp账号格式
-		if !isValidWhatsAppEmail(userKey) {
-			continue
-		}
+	// 遍历从数据库获取的账号
+	for _, account := range accounts {
+		userKey := account.AppUniqueID
+		userDataStr, inRedis := allUsersData[userKey]
 
 		var onlineInfo UserOnlineInfo
-		if err := json.Unmarshal([]byte(userDataStr), &onlineInfo); err != nil {
-			continue
-		}
+		isOffline := false
 
-		// 2. 检查是否为离线状态
-		if onlineInfo.Online {
-			continue
-		}
-
-		// 3. 检查心跳是否在3分钟内（180秒）
-		// if currentTime-onlineInfo.HeartbeatTime > 180 {
-		// 	continue
-		// }
-
-		// 4. 检查设备编码是否存在且对应的设备在线状态
-		if onlineInfo.BdClientNo == "" {
-			continue
-		}
-
-		// 5. 检查设备是否有对应的在线连接且在线
-		if v, ok := keyMap[onlineInfo.BdClientNo]; ok && v.Online {
-			continue
-		}
-
-		// 6. 查找对应的数据库账号记录
-		var matchedAccount *SocialAccount
-		for _, account := range accounts {
-			if account.AppUniqueID == userKey && account.DevCode == onlineInfo.BdClientNo {
-				matchedAccount = &account
-				break
+		if !inRedis {
+			// 不在Redis中，视为离线
+			isOffline = true
+			// 为后续处理创建一个模拟的 onlineInfo
+			onlineInfo = UserOnlineInfo{
+				Online:        false,
+				HeartbeatTime: 0, // 没有心跳信息
+				BdClientNo:    account.DevCode,
+				PlatformId:    fmt.Sprintf("%d", account.AccountType),
+			}
+			log.Printf("信息: 账号 %s 在Redis中未找到，视为离线处理。", userKey)
+		} else {
+			// 在Redis中，解析数据并检查是否离线
+			if err := json.Unmarshal([]byte(userDataStr), &onlineInfo); err != nil {
+				log.Printf("错误: 解析账号 %s 的Redis数据失败: %v", userKey, err)
+				continue
+			}
+			if !onlineInfo.Online {
+				isOffline = true
 			}
 		}
 
-		if matchedAccount == nil {
+		// 如果账号在线，则跳过
+		if !isOffline {
 			continue
 		}
 
-		// --- Start of new logic: Rate limit check ---
-		// Use a background context for these short-lived Redis operations
+		// --- 从这里开始，是所有离线账号（无论是否在Redis中）的通用处理逻辑 ---
+
+		// 1. 检查设备编码是否匹配 (仅当账号在Redis中时)
+		if inRedis && account.DevCode != onlineInfo.BdClientNo {
+			log.Printf("警告: 账号 %s 的设备编码不匹配。数据库: %s, Redis: %s。跳过此账号。", userKey, account.DevCode, onlineInfo.BdClientNo)
+			continue
+		}
+
+		// 2. 检查设备编码是否存在 (数据库查询已保证 dev_code 非空)
+		if account.DevCode == "" {
+			continue
+		}
+
+		// 3. 检查设备本身是否在线，如果设备在线则不重启
+		if v, ok := keyMap[account.DevCode]; ok && v.Online {
+			continue
+		}
+
+		// 4. 重启频率限制检查
 		redisCtx := context.Background()
 		redisKey := fmt.Sprintf("account:restart:count:%s", userKey)
 
-		// Increment and get the current count
 		count, err := rdb.Incr(redisCtx, redisKey).Result()
 		if err != nil {
 			log.Printf("错误: Redis INCR 失败 for key %s: %v", redisKey, err)
-			continue // Skip this account on Redis error
+			continue
 		}
 
-		// If this is the first increment in the 1-hour window, set the expiry
 		if count == 1 {
 			rdb.Expire(redisCtx, redisKey, 15*time.Minute)
 		}
 
-		// If count exceeds 6, mark as abnormal and skip
 		if count > 6 {
-			log.Printf("警告: 账号 %s 在1小时内重启次数超过6次，将被标记为异常。", userKey)
-
-			// Update account_status to 4 (abnormal) in the database
-			if err := db.G.Table("social_accounts").Where("app_unique_id = ?", userKey).Where("deleted_at IS NULL").Update("account_status", 4).Error; err != nil {
+			log.Printf("警告: 账号 %s 在15分钟内重启次数超过6次，将被标记为异常。", userKey)
+			if err := db.G.Table("social_accounts").Where("id = ?", account.ID).Update("account_status", 4).Error; err != nil {
 				log.Printf("错误: 更新账号 %s 状态为异常失败: %v", userKey, err)
 			} else {
 				log.Printf("成功: 账号 %s 已被标记为异常 (account_status = 4)。", userKey)
-				// On successful update, delete the redis counter to allow for manual reset
 				rdb.Del(redisCtx, redisKey)
 			}
-			continue // Do not add to the restart list
+			continue
 		}
-		// --- End of new logic ---
 
-		// 确定设备类型
+		// 5. 确定设备类型
 		devType := 0
-		if isValidBaiduYun(onlineInfo.BdClientNo) {
+		if isValidBaiduYun(account.DevCode) {
 			devType = 2 // 百度云机
-		} else if isValidBoxYun(onlineInfo.BdClientNo) {
+		} else if isValidBoxYun(account.DevCode) {
 			devType = 1 // 盒子云机
 		}
 
 		if devType == 0 {
+			log.Printf("警告: 账号 %s 的设备类型无法识别: %s", userKey, account.DevCode)
 			continue // 无法识别的设备类型
 		}
 
-		// 确定应用包名
+		// 6. 确定应用包名
 		pkg := "com.whatsapp"
-		if onlineInfo.PlatformId == "2" {
+		if account.AccountType == 2 { // 使用数据库中的 PlatformId
 			pkg = "com.whatsapp.w4b"
 		}
 
 		restartAccount := RestartAccountInfo{
-			Account:       matchedAccount.Account,
+			Account:       account.Account,
 			AppUniqueID:   userKey,
-			DevCode:       onlineInfo.BdClientNo,
+			DevCode:       account.DevCode,
 			DevType:       devType,
-			PlatformId:    onlineInfo.PlatformId,
+			PlatformId:    fmt.Sprintf("%d", account.AccountType),
 			Pkg:           pkg,
-			HeartbeatTime: onlineInfo.HeartbeatTime,
-			OnlineInfo:    onlineInfo,
+			HeartbeatTime: onlineInfo.HeartbeatTime, // 来自真实或模拟的 info
+			OnlineInfo:    onlineInfo,               // 真实或模拟的 info
 		}
 
 		restartAccounts = append(restartAccounts, restartAccount)
