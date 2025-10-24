@@ -258,6 +258,18 @@ func executeAccountRestart() {
 
 		if count > 6 {
 			log.Printf("警告: 账号 %s 在15分钟内重启次数超过6次，将被标记为异常。", userKey)
+			// 看看状态还是不是1，如果不是就不更新了，因为有可能被封号了
+			var status int
+			if err := db.G.Table("social_accounts").Where("id = ?", account.ID).Select("account_status").Scan(&status).Error; err != nil {
+				log.Printf("错误: 查询账号 %s 状态失败: %v", userKey, err)
+				continue
+			}
+			if status != 1 {
+				log.Printf("信息: 账号 %s 当前状态为 %d，跳过标记为异常。", userKey, status)
+				rdb.Del(redisCtx, redisKey)
+				continue
+			}
+			// 更新状态为异常 (4)
 			if err := db.G.Table("social_accounts").Where("id = ?", account.ID).Update("account_status", 4).Error; err != nil {
 				log.Printf("错误: 更新账号 %s 状态为异常失败: %v", userKey, err)
 			} else {
