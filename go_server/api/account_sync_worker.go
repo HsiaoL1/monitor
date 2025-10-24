@@ -229,10 +229,10 @@ func executeAccountRestart() {
 		// --- 从这里开始，是所有离线账号（无论是否在Redis中）的通用处理逻辑 ---
 
 		// 1. 检查设备编码是否匹配 (仅当账号在Redis中时)
-		if inRedis && account.DevCode != onlineInfo.BdClientNo {
-			log.Printf("警告: 账号 %s 的设备编码不匹配。数据库: %s, Redis: %s。跳过此账号。", userKey, account.DevCode, onlineInfo.BdClientNo)
-			continue
-		}
+		// if inRedis && account.DevCode != onlineInfo.BdClientNo {
+		// 	log.Printf("警告: 账号 %s 的设备编码不匹配。数据库: %s, Redis: %s。跳过此账号。", userKey, account.DevCode, onlineInfo.BdClientNo)
+		// 	continue
+		// }
 
 		// 2. 检查设备编码是否存在 (数据库查询已保证 dev_code 非空)
 		if account.DevCode == "" {
@@ -240,9 +240,9 @@ func executeAccountRestart() {
 		}
 
 		// 3. 检查设备本身是否在线，如果设备在线则不重启
-		if v, ok := keyMap[account.DevCode]; ok && v.Online {
-			continue
-		}
+		// if v, ok := keyMap[account.DevCode]; ok && v.Online {
+		// 	continue
+		// }
 
 		// 4. 重启频率限制检查
 		redisCtx := context.Background()
@@ -254,9 +254,7 @@ func executeAccountRestart() {
 			continue
 		}
 
-		if count == 1 {
-			rdb.Expire(redisCtx, redisKey, 15*time.Minute)
-		}
+		rdb.Expire(redisCtx, redisKey, 15*time.Minute)
 
 		if count > 6 {
 			log.Printf("警告: 账号 %s 在15分钟内重启次数超过6次，将被标记为异常。", userKey)
