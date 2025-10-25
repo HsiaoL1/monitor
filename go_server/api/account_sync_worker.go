@@ -281,11 +281,15 @@ func executeAccountRestart() {
 
 		// 5. 确定设备类型
 		devType := 0
-		if isValidBaiduYun(account.DevCode) {
-			devType = 2 // 百度云机
-		} else if isValidBoxYun(account.DevCode) {
-			devType = 1 // 盒子云机
+		var getDevType = func() int {
+			if isValidBaiduYun(account.DevCode) {
+				return 2 // 百度云机
+			} else if isValidBoxYun(account.DevCode) {
+				return 1 // 盒子云机
+			}
+			return 0
 		}
+		devType = getDevType()
 
 		if devType == 0 {
 			log.Printf("警告: 账号 %s 的设备类型无法识别: %s", userKey, account.DevCode)
@@ -298,6 +302,7 @@ func executeAccountRestart() {
 			pkg = "com.whatsapp.w4b"
 		}
 
+		// 7，启动数据库里面账号绑定的云机
 		restartAccount := RestartAccountInfo{
 			Account:       account.Account,
 			AppUniqueID:   userKey,
@@ -310,6 +315,22 @@ func executeAccountRestart() {
 		}
 
 		restartAccounts = append(restartAccounts, restartAccount)
+
+		// 8，启动redis里面账号绑定的云机（如果和数据库不一样的话）
+		if account.DevCode == onlineInfo.BdClientNo {
+			restartAccount = RestartAccountInfo{
+				Account:       account.Account,
+				AppUniqueID:   userKey,
+				DevCode:       onlineInfo.BdClientNo,
+				DevType:       getDevType(),
+				PlatformId:    fmt.Sprintf("%d", account.AccountType),
+				Pkg:           pkg,
+				HeartbeatTime: onlineInfo.HeartbeatTime, // 来自真实或模拟的 info
+				OnlineInfo:    onlineInfo,               // 真实或模拟的 info
+			}
+
+			restartAccounts = append(restartAccounts, restartAccount)
+		}
 	}
 
 	if len(restartAccounts) == 0 {
