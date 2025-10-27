@@ -559,10 +559,10 @@ func executeRestartOperation(info RestartAccountInfo) bool {
 	// 使用 goroutine 异步执行重启
 	go func() {
 		// 先检查一下代理是否可用
-		_, err := checkAndReplaceProxyForDevice(info.DevCode)
-		if err != nil {
-			log.Printf("检查或更换代理失败: 账号=%s, 设备=%s, 错误=%v", info.AppUniqueID, info.DevCode, err)
-		}
+		// _, err := checkAndReplaceProxyForDevice(info.DevCode)
+		// if err != nil {
+		// 	log.Printf("检查或更换代理失败: 账号=%s, 设备=%s, 错误=%v", info.AppUniqueID, info.DevCode, err)
+		// }
 		// 等待一段时间，看看恢复了没有
 		time.Sleep(90 * time.Second)
 
