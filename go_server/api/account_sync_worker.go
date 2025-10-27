@@ -558,6 +558,27 @@ func executeRestartOperation(info RestartAccountInfo) bool {
 
 	// 使用 goroutine 异步执行重启
 	go func() {
+		// 先检查一下代理是否可用
+		_, err := checkAndReplaceProxyForDevice(info.DevCode)
+		if err != nil {
+			log.Printf("检查或更换代理失败: 账号=%s, 设备=%s, 错误=%v", info.AppUniqueID, info.DevCode, err)
+		}
+		// 等待一段时间，看看恢复了没有
+		time.Sleep(90 * time.Second)
+
+		// 再次查询一下在线状态
+		var latestOnlineStatus int
+		if err := db.G.Table("social_accounts").Where("app_unique_id = ?", info.AppUniqueID).Select("online_status").Scan(&latestOnlineStatus).Error; err != nil {
+			log.Printf("查询账号最新在线状态失败: 账号=%s, 错误=%v", info.AppUniqueID, err)
+			return
+		}
+
+		// 如果恢复在线，跳过重启
+		if latestOnlineStatus == 1 {
+			log.Printf("账号在等待期间已恢复在线，跳过重启: 账号=%s", info.AppUniqueID)
+			return
+		}
+
 		// 先强制停止
 		if err := ForceStop(info.DevCode, info.DevType, info.Pkg); err != nil {
 			log.Printf("强制停止失败: 账号=%s, 设备=%s, 错误=%v", info.AppUniqueID, info.DevCode, err)
