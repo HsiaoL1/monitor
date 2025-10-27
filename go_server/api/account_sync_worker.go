@@ -371,29 +371,29 @@ func executeAccountRestart() {
 		rdb.Expire(redisCtx, redisKey, 15*time.Minute)
 
 		// 新增：检查并更换代理
-		if account.DevCode != "" {
-			_, err := checkAndReplaceProxyForDevice(account.DevCode)
-			if err != nil {
-				log.Printf("错误: 检查或更换代理失败 for device %s: %v", account.DevCode, err)
-			}
-			// if proxyOK {
-			// 	log.Printf("信息: 设备 %s 的代理不可用且无法更换，跳过重启账号 %s。", account.DevCode, account.AppUniqueID)
-			// 	continue // Skip to next account
-			// }
-		}
+		// if account.DevCode != "" {
+		// 	_, err := checkAndReplaceProxyForDevice(account.DevCode)
+		// 	if err != nil {
+		// 		log.Printf("错误: 检查或更换代理失败 for device %s: %v", account.DevCode, err)
+		// 	}
+		// if proxyOK {
+		// 	log.Printf("信息: 设备 %s 的代理不可用且无法更换，跳过重启账号 %s。", account.DevCode, account.AppUniqueID)
+		// 	continue // Skip to next account
+		// }
+		// }
 
 		// 等待一段时间，看看状态恢复了没有，如果恢复了，就不必重启了
-		time.Sleep(90 * time.Second)
+		// time.Sleep(90 * time.Second)
 		// 再次查询一下在线状态
-		var latestOnlineStatus int
-		if err := db.G.Table("social_accounts").Where("id = ?", account.ID).Select("online_status").Scan(&latestOnlineStatus).Error; err != nil {
-			log.Printf("错误: 查询账号 %s 最新在线状态失败: %v", userKey, err)
-			continue
-		}
-		if latestOnlineStatus == 1 {
-			log.Printf("信息: 账号 %s 在等待期间已恢复在线，跳过重启。", userKey)
-			continue
-		}
+		// var latestOnlineStatus int
+		// if err := db.G.Table("social_accounts").Where("id = ?", account.ID).Select("online_status").Scan(&latestOnlineStatus).Error; err != nil {
+		// 	log.Printf("错误: 查询账号 %s 最新在线状态失败: %v", userKey, err)
+		// 	continue
+		// }
+		// if latestOnlineStatus == 1 {
+		// 	log.Printf("信息: 账号 %s 在等待期间已恢复在线，跳过重启。", userKey)
+		// 	continue
+		// }
 
 		// 如果60分钟内重启次数超过6次，则标记为异常
 
