@@ -1749,6 +1749,22 @@ func findAvailableReplacement(merchantID int64, excludeProxyID int64, contry_cod
 
 	// 测试每个代理的可用性，返回第一个可用的
 	for _, proxy := range proxies {
+		// 为了避免最后都使用同一个代理，排除已经超过两个机器使用的代理
+		var usageCount int64
+		err := db.G.Table("ai_box_device").
+			Where("proxy_id = ? AND deleted_at IS NULL", proxy.ID).
+			Count(&usageCount).Error
+		if err == nil && usageCount == 0 {
+			err := db.G.Table("cloud_device").
+				Where("proxy_id = ? AND deleted_at IS NULL", proxy.ID).
+				Count(&usageCount).Error
+			if err != nil {
+				return ProxyInfo{}, false, err
+			}
+		}
+		if usageCount >= 2 {
+			continue
+		}
 		isAvailable, _, _, _ := checkProxyAvailability(proxy)
 		if isAvailable {
 			return proxy, true, nil
