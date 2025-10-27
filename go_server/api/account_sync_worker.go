@@ -122,6 +122,120 @@ func autoAccountRestartWorker(ctx context.Context) {
 	}
 }
 
+// DeviceBasicInfo to hold basic device info
+type DeviceBasicInfo struct {
+	ID         int64
+	ProxyID    int64
+	MerchantID int64
+	DeviceType string // "ai_box_device" or "cloud_device"
+}
+
+func getDeviceBasicInfo(devCode string) (DeviceBasicInfo, bool) {
+	var deviceInfo DeviceBasicInfo
+
+	var aiBoxDevice struct {
+		ID         int64
+		ProxyID    int64
+		MerchantID int64
+	}
+	if err := db.G.Table("ai_box_device").Where("dev_code = ? AND deleted_at IS NULL", devCode).Select("id, proxy_id, merchant_id").First(&aiBoxDevice).Error; err == nil {
+		deviceInfo.ID = aiBoxDevice.ID
+		deviceInfo.ProxyID = aiBoxDevice.ProxyID
+		deviceInfo.MerchantID = aiBoxDevice.MerchantID
+		deviceInfo.DeviceType = "ai_box_device"
+		return deviceInfo, true
+	}
+
+	var cloudDevice struct {
+		ID         int64
+		ProxyID    int64
+		MerchantID int64
+	}
+	if err := db.G.Table("cloud_device").Where("dev_code = ? AND deleted_at IS NULL", devCode).Select("id, proxy_id, merchant_id").First(&cloudDevice).Error; err == nil {
+		deviceInfo.ID = cloudDevice.ID
+		deviceInfo.ProxyID = cloudDevice.ProxyID
+		deviceInfo.MerchantID = cloudDevice.MerchantID
+		deviceInfo.DeviceType = "cloud_device"
+		return deviceInfo, true
+	}
+
+	return deviceInfo, false
+}
+
+func checkAndReplaceProxyForDevice(devCode string) (bool, error) {
+	if devCode == "" {
+		return true, nil // No device, no proxy, so it's "ok"
+	}
+
+	deviceInfo, found := getDeviceBasicInfo(devCode)
+	if !found || deviceInfo.ProxyID == 0 {
+		return true, nil // No device or no proxy assigned, consider it ok.
+	}
+
+	var proxyInfo ProxyInfo
+	if err := db.G.Table("proxy").Where("id = ? AND deleted_at IS NULL", deviceInfo.ProxyID).First(&proxyInfo).Error; err != nil {
+		return false, fmt.Errorf("获取代理信息失败 (ID: %d): %w", deviceInfo.ProxyID, err)
+	}
+
+	isAvailable, _, _, _ := checkProxyAvailability(proxyInfo)
+	if isAvailable {
+		log.Printf("信息: 设备 %s 的代理 %d (%s) 可用。", devCode, proxyInfo.ID, proxyInfo.IP)
+		return true, nil
+	}
+
+	log.Printf("警告: 设备 %s 的代理 %d (%s) 不可用，尝试更换...", devCode, proxyInfo.ID, proxyInfo.IP)
+
+	replacement, found, err := findAvailableReplacement(proxyInfo.MerchantID, proxyInfo.ID, proxyInfo.CountryCode)
+	if err != nil {
+		return false, fmt.Errorf("查找替代代理失败: %w", err)
+	}
+
+	if !found {
+		log.Printf("警告: 设备 %s 没有找到可用的替代代理。", devCode)
+		LogProxyReplacement(
+			int(proxyInfo.ID), 0,
+			int(proxyInfo.MerchantID), 0,
+			proxyInfo.IP, proxyInfo.Port,
+			"", "",
+			false, 1, // 1 device affected
+			"自动重启前更换失败", "未找到可用替代代理",
+			"system", "auto-restart",
+		)
+		return false, nil
+	}
+
+	log.Printf("信息: 为设备 %s 找到替代代理 %d (%s)。正在更新...", devCode, replacement.ID, replacement.IP)
+
+	if err := db.G.Table(deviceInfo.DeviceType).Where("id = ?", deviceInfo.ID).Update("proxy_id", replacement.ID).Error; err != nil {
+		LogProxyReplacement(
+			int(proxyInfo.ID), int(replacement.ID),
+			int(proxyInfo.MerchantID), int(replacement.MerchantID),
+			proxyInfo.IP, proxyInfo.Port,
+			replacement.IP, replacement.Port,
+			false, 1,
+			"自动重启前更换失败", fmt.Sprintf("更新设备代理失败: %v", err),
+			"system", "auto-restart",
+		)
+		return false, fmt.Errorf("更新设备 %s 的代理失败: %w", devCode, err)
+	}
+
+	LogProxyReplacement(
+		int(proxyInfo.ID), int(replacement.ID),
+		int(proxyInfo.MerchantID), int(replacement.MerchantID),
+		proxyInfo.IP, proxyInfo.Port,
+		replacement.IP, replacement.Port,
+		true, 1,
+		"自动重启前更换成功", "",
+		"system", "auto-restart",
+	)
+
+	invalidateProxyCache(proxyInfo.ID)
+	invalidateProxyCache(replacement.ID)
+
+	log.Printf("成功: 设备 %s 的代理已从 %d 更新为 %d。", devCode, proxyInfo.ID, replacement.ID)
+	return true, nil
+}
+
 // executeAccountRestart 执行账号重启检测和操作
 func executeAccountRestart() {
 	log.Println("开始执行账号自动重启检测...")
@@ -255,6 +369,18 @@ func executeAccountRestart() {
 		}
 
 		rdb.Expire(redisCtx, redisKey, 15*time.Minute)
+
+		// 新增：检查并更换代理
+		if account.DevCode != "" {
+			proxyOK, err := checkAndReplaceProxyForDevice(account.DevCode)
+			if err != nil {
+				log.Printf("错误: 检查或更换代理失败 for device %s: %v", account.DevCode, err)
+			}
+			if !proxyOK {
+				log.Printf("信息: 设备 %s 的代理不可用且无法更换，跳过重启账号 %s。", account.DevCode, account.AppUniqueID)
+				continue // Skip to next account
+			}
+		}
 
 		if count > 6 {
 			log.Printf("警告: 账号 %s 在15分钟内重启次数超过6次，将被标记为异常。", userKey)
