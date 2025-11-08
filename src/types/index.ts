@@ -292,3 +292,42 @@ export interface TraceData {
   rootSpan: Span;
   spans: Span[];
 }
+
+// Browser Farm Types
+export interface BrowserServer {
+  id: number;
+  name: string;
+  max_browser_count: number;
+  created_at: string;
+}
+
+export interface BrowserServerStat extends BrowserServer {
+  online_account_count: number;
+}
+
+export interface BrowserServerAccounts {
+  online: string[];
+  offline: string[];
+}
+
+export interface BrowserAccountInfo {
+  id: number;
+  account: string;
+  merchant_id: number;
+  account_type: number;
+  account_status: number;
+  web_online_status: number;
+  web_heart_time: string;
+  web_client_no: string;
+  country_code: string;
+  dev_code: string;
+  device_type: number;
+}
+
+export interface BrowserAccountsResponse {
+  success: boolean;
+  data: BrowserAccountInfo[];
+  total: number;
+  page: number;
+  page_size: number;
+}

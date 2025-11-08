@@ -125,6 +125,18 @@ func SetupRouter() *gin.Engine {
 
 			// Pprof routes
 			auth.GET("/pprof/:serviceName/flamegraph", PprofFlamegraphHandler)
+
+			// Browser Server Management
+			browserServerGroup := auth.Group("/browser-servers")
+			{
+				browserServerGroup.GET("", GetBrowserServersHandler)
+				browserServerGroup.POST("", CreateBrowserServerHandler)
+				browserServerGroup.PUT("/:id", UpdateBrowserServerHandler)
+				browserServerGroup.DELETE("/:id", DeleteBrowserServerHandler)
+				browserServerGroup.GET("/stats", GetBrowserServerStatsHandler)
+			}
+			auth.GET("/browser-accounts", GetBrowserAccountsHandler)
+			auth.POST("/browser-accounts/relogin", ReloginBrowserAccountsHandler)
 		}
 	}
 

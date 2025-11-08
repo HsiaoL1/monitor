@@ -1224,6 +1224,7 @@ type CloudDevice struct {
 	CountryCode string `gorm:"column:country_code" json:"country_code"`
 	DevName     string `gorm:"column:dev_name" json:"dev_name"`
 	CustomCode  *int   `gorm:"column:custom_code" json:"custom_code"`
+	ProxyId     int    `gorm:"column:proxy_id" json:"proxy_id"`
 }
 
 // AiBoxDevice 盒子设备信息
@@ -1238,6 +1239,7 @@ type AiBoxDevice struct {
 	MerchantID     int        `gorm:"column:merchant_id" json:"merchant_id"`
 	DevName        string     `gorm:"column:dev_name" json:"dev_name"`
 	CustomCode     *int       `gorm:"column:custom_code" json:"custom_code"`
+	ProxyId        int        `gorm:"column:proxy_id" json:"proxy_id"`
 }
 
 // DeviceMonitorInfo 设备监控信息

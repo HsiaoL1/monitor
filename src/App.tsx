@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { Layout, Menu, Button, message } from 'antd';
-import { DashboardOutlined, ControlOutlined, CodeOutlined, DatabaseOutlined, UserOutlined, GlobalOutlined, LogoutOutlined, BarChartOutlined, LineChartOutlined, HistoryOutlined, MonitorOutlined, RocketOutlined, BranchesOutlined, FileTextOutlined, ToolOutlined, LaptopOutlined, PlayCircleOutlined } from '@ant-design/icons';
+import { DashboardOutlined, ControlOutlined, CodeOutlined, DatabaseOutlined, UserOutlined, GlobalOutlined, LogoutOutlined, BarChartOutlined, LineChartOutlined, HistoryOutlined, MonitorOutlined, RocketOutlined, BranchesOutlined, FileTextOutlined, ToolOutlined, LaptopOutlined, PlayCircleOutlined, CloudServerOutlined, SettingOutlined } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import ResourceMonitor from './components/ResourceMonitor';
 import ResourceChart from './components/ResourceChart';
@@ -19,6 +19,9 @@ import DeviceMonitor from './components/DeviceMonitor';
 import Login from './components/Login';
 import { checkAuth, logout } from './services/api';
 import AutoAccountRestartManager from './components/AutoAccountRestartManager';
+import BrowserServerManager from './components/BrowserServerManager';
+import BrowserServerMonitor from './components/BrowserServerMonitor';
+import BrowserAccountMonitor from './components/BrowserAccountMonitor';
 
 const { Header, Sider, Content } = Layout;
 
@@ -38,6 +41,8 @@ const AppContent: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       setOpenKeys(['ops']);
     } else if (path === '/proxy-monitor' || path === '/proxy-replace-log') {
       setOpenKeys(['proxy']);
+    } else if (path === '/browser-servers' || path === '/browser-server-monitor') {
+      setOpenKeys(['browser-farm']);
     }
   }, [location.pathname]);
 
@@ -150,6 +155,28 @@ const AppContent: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       icon: <BranchesOutlined />,
       label: '链路追踪',
     },
+    {
+      key: 'browser-farm',
+      icon: <CloudServerOutlined />,
+      label: '服务器集群',
+      children: [
+        {
+          key: '/browser-servers',
+          icon: <SettingOutlined />,
+          label: '集群管理',
+        },
+        {
+          key: '/browser-server-monitor',
+          icon: <MonitorOutlined />,
+          label: '集群监控',
+        },
+        {
+            key: '/browser-account-monitor',
+            icon: <UserOutlined />,
+            label: '账号在线监控',
+        }
+      ]
+    },
   ];
 
   const getSelectedKeys = () => {
@@ -200,6 +227,9 @@ const AppContent: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
               <Route path="/proxy-replace-log" element={<ProxyReplaceLog />} />
               <Route path="/ci-cd" element={<CICDManager />} />
               <Route path="/trace-analysis" element={<TraceAnalysis />} />
+              <Route path="/browser-servers" element={<BrowserServerManager />} />
+              <Route path="/browser-server-monitor" element={<BrowserServerMonitor />} />
+              <Route path="/browser-account-monitor" element={<BrowserAccountMonitor />} />
             </Routes>
           </Content>
         </Layout>
