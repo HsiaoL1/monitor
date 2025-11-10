@@ -218,9 +218,9 @@ const BrowserAccountMonitor: React.FC = () => {
               style={{ width: '100%' }}
               value={filters.web_client_no}
               onChange={value => handleFilterChange('web_client_no', value)}
-              allowClear
               showSearch
             >
+              <Option value="">全部</Option>
               {servers.map(s => (
                 <Option key={s.id} value={s.name}>
                   {s.name}
@@ -234,12 +234,10 @@ const BrowserAccountMonitor: React.FC = () => {
               style={{ width: '100%' }}
               value={filters.web_online_status}
               onChange={value => handleFilterChange('web_online_status', value)}
-              allowClear
             >
+              <Option value="">全部</Option>
               <Option value="1">在线</Option>
               <Option value="0">离线</Option>
-              <Option value="2">上线中</Option>
-              <Option value="3">下线中</Option>
             </Select>
           </Col>
           <Col span={5}>

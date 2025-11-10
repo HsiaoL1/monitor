@@ -262,6 +262,8 @@ func GetBrowserAccountsHandler(c *gin.Context) {
 	// Apply filters
 	if webClientNo != "" {
 		query = query.Where("web_client_no = ?", webClientNo)
+	} else {
+		query = query.Where("web_client_no != ''")
 	}
 	if webOnlineStatus != "" {
 		query = query.Where("web_online_status = ?", webOnlineStatus)
