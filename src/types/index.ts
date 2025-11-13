@@ -331,3 +331,25 @@ export interface BrowserAccountsResponse {
   page: number;
   page_size: number;
 }
+
+export interface DeviceVersion {
+  dev_code: string;
+  device_type: number;
+  merchant_id: number;
+  personal_app_version: string;
+  is_personal_app_latest: boolean;
+  business_app_version: string;
+  is_business_app_latest: boolean;
+  personal_plugin_version: string;
+  is_personal_plugin_latest: boolean;
+  business_plugin_version: string;
+  is_business_plugin_latest: boolean;
+}
+
+export interface DeviceVersionResponse {
+  success: boolean;
+  data: DeviceVersion[];
+  total: number;
+  page: number;
+  page_size: number;
+}

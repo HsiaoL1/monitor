@@ -50,7 +50,7 @@ func (s *CICDStore) CreateDeployment(deployment *models.Deployment) error {
 }
 
 // UpdateDeployment updates deployment status and logs
-func (s *CICDStore) UpdateDeployment(id int64, updates map[string]interface{}) error {
+func (s *CICDStore) UpdateDeployment(id int64, updates map[string]any) error {
 	if s.db != nil {
 		updates["updated_at"] = time.Now()
 		return s.db.Model(&models.Deployment{}).Where("id = ?", id).Updates(updates).Error

@@ -123,6 +123,8 @@ func SetupRouter() *gin.Engine {
 				cicdGroup.GET("/stats", cicdHandler.GetDeploymentStats)
 			}
 
+			auth.GET("/device-app-versions", GetDeviceAppVersionsHandler)
+
 			// Pprof routes
 			auth.GET("/pprof/:serviceName/flamegraph", PprofFlamegraphHandler)
 

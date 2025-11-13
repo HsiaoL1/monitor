@@ -166,7 +166,7 @@ func (asls *AccountSyncLogStorage) GetAccountSyncLogs(startDate, endDate time.Ti
 }
 
 // GetLogStats returns statistics about sync logs
-func (asls *AccountSyncLogStorage) GetLogStats(startDate, endDate time.Time) (map[string]interface{}, error) {
+func (asls *AccountSyncLogStorage) GetLogStats(startDate, endDate time.Time) (map[string]any, error) {
 	logs, err := asls.GetAccountSyncLogs(startDate, endDate)
 	if err != nil {
 		return nil, err
@@ -192,13 +192,13 @@ func (asls *AccountSyncLogStorage) GetLogStats(startDate, endDate time.Time) (ma
 		}
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"totalRecords":    totalRecords,
 		"successCount":    successCount,
 		"failureCount":    failureCount,
 		"singleSyncCount": singleSyncCount,
 		"batchSyncCount":  batchSyncCount,
-		"dateRange": map[string]interface{}{
+		"dateRange": map[string]any{
 			"start": startDate.Format(time.RFC3339),
 			"end":   endDate.Format(time.RFC3339),
 		},
@@ -246,10 +246,10 @@ func (asls *AccountSyncLogStorage) ExportLogs(startDate, endDate time.Time) ([]b
 
 	stats, _ := asls.GetLogStats(startDate, endDate)
 
-	exportData := map[string]interface{}{
-		"metadata": map[string]interface{}{
+	exportData := map[string]any{
+		"metadata": map[string]any{
 			"exportTime": time.Now().Format(time.RFC3339),
-			"dateRange": map[string]interface{}{
+			"dateRange": map[string]any{
 				"start": startDate.Format(time.RFC3339),
 				"end":   endDate.Format(time.RFC3339),
 			},

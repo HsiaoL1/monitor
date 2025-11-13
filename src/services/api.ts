@@ -588,6 +588,24 @@ export const fetchDeviceMonitoring = async (params: {
   }
 };
 
+export const fetchDeviceVersions = async (params: {
+  page?: number;
+  page_size?: number;
+  search_query?: string;
+  device_type?: number;
+  version_status?: string;
+  app_version?: string;
+  plugin_version?: string;
+}) => {
+  try {
+    const response = await api.get('/device-app-versions', { params });
+    return response.data;
+  } catch (error: any) {
+    console.error('Failed to fetch device versions:', error);
+    throw error;
+  }
+};
+
 // Browser Server Management
 export const getBrowserServers = async (): Promise<{ success: boolean, data: BrowserServer[] }> => {
   const response = await api.get('/browser-servers');

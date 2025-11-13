@@ -128,7 +128,7 @@ func UpdateBrowserServerHandler(c *gin.Context) {
 	oldName := currentServer.Name
 
 	// Update DB
-	updates := map[string]interface{}{
+	updates := map[string]any{
 		"name":              req.Name,
 		"max_browser_count": req.MaxBrowserCount,
 	}

@@ -13,24 +13,24 @@ import (
 
 // ProxyReplaceLogEntry represents a proxy replacement log entry
 type ProxyReplaceLogEntry struct {
-	ID          int    `json:"id,omitempty"`
-	ReplaceTime string `json:"replaceTime"`
-	OldProxy    ProxyInfo `json:"oldProxy"`
-	NewProxy    ProxyInfo `json:"newProxy"`
-	Success     bool   `json:"success"`
-	DevicesCount int   `json:"devicesCount"`
-	Reason      string `json:"reason,omitempty"`
-	ErrorMessage string `json:"errorMessage,omitempty"`
-	Operator    string `json:"operator,omitempty"`
-	OperatorType string `json:"operatorType"` // "manual" or "auto"
+	ID           int       `json:"id,omitempty"`
+	ReplaceTime  string    `json:"replaceTime"`
+	OldProxy     ProxyInfo `json:"oldProxy"`
+	NewProxy     ProxyInfo `json:"newProxy"`
+	Success      bool      `json:"success"`
+	DevicesCount int       `json:"devicesCount"`
+	Reason       string    `json:"reason,omitempty"`
+	ErrorMessage string    `json:"errorMessage,omitempty"`
+	Operator     string    `json:"operator,omitempty"`
+	OperatorType string    `json:"operatorType"` // "manual" or "auto"
 }
 
 // ProxyInfo represents basic proxy information for logging
 type ProxyInfo struct {
-	ID         int `json:"id"`
+	ID         int    `json:"id"`
 	IP         string `json:"ip"`
 	Port       string `json:"port"`
-	MerchantID int `json:"merchant_id"`
+	MerchantID int    `json:"merchant_id"`
 }
 
 // ProxyLogStorage manages proxy replacement logs in files
@@ -43,7 +43,7 @@ type ProxyLogStorage struct {
 func NewProxyLogStorage(logDir string) *ProxyLogStorage {
 	// Ensure log directory exists
 	os.MkdirAll(logDir, 0755)
-	
+
 	return &ProxyLogStorage{
 		logDir: logDir,
 	}
@@ -81,7 +81,7 @@ func (pls *ProxyLogStorage) LogProxyReplace(
 
 	// Read existing logs for today
 	var logs []ProxyReplaceLogEntry
-	if data, err := ioutil.ReadFile(filepath); err == nil {
+	if data, err := os.ReadFile(filepath); err == nil {
 		json.Unmarshal(data, &logs)
 	}
 
@@ -160,7 +160,7 @@ func (pls *ProxyLogStorage) GetProxyReplaceLogs(startDate, endDate time.Time) ([
 }
 
 // GetLogStats returns statistics about replacement logs
-func (pls *ProxyLogStorage) GetLogStats(startDate, endDate time.Time) (map[string]interface{}, error) {
+func (pls *ProxyLogStorage) GetLogStats(startDate, endDate time.Time) (map[string]any, error) {
 	logs, err := pls.GetProxyReplaceLogs(startDate, endDate)
 	if err != nil {
 		return nil, err
@@ -178,11 +178,11 @@ func (pls *ProxyLogStorage) GetLogStats(startDate, endDate time.Time) (map[strin
 		}
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"totalRecords": totalRecords,
 		"successCount": successCount,
 		"failureCount": failureCount,
-		"dateRange": map[string]interface{}{
+		"dateRange": map[string]any{
 			"start": startDate.Format(time.RFC3339),
 			"end":   endDate.Format(time.RFC3339),
 		},
@@ -230,10 +230,10 @@ func (pls *ProxyLogStorage) ExportLogs(startDate, endDate time.Time) ([]byte, er
 
 	stats, _ := pls.GetLogStats(startDate, endDate)
 
-	exportData := map[string]interface{}{
-		"metadata": map[string]interface{}{
+	exportData := map[string]any{
+		"metadata": map[string]any{
 			"exportTime": time.Now().Format(time.RFC3339),
-			"dateRange": map[string]interface{}{
+			"dateRange": map[string]any{
 				"start": startDate.Format(time.RFC3339),
 				"end":   endDate.Format(time.RFC3339),
 			},

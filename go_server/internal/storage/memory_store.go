@@ -31,13 +31,13 @@ type MemoryStore struct {
 func NewMemoryStore() *MemoryStore {
 	store := &MemoryStore{
 		data:     make(map[string][]MetricPoint),
-		maxAge:   24 * time.Hour, // keep 24 hours of data
+		maxAge:   24 * time.Hour,   // keep 24 hours of data
 		interval: 10 * time.Minute, // cleanup every 10 minutes
 	}
-	
+
 	// Start cleanup routine
 	go store.cleanupRoutine()
-	
+
 	return store
 }
 
@@ -45,15 +45,15 @@ func NewMemoryStore() *MemoryStore {
 func (ms *MemoryStore) AddMetric(serviceName string, cpu, memory float64) {
 	ms.mutex.Lock()
 	defer ms.mutex.Unlock()
-	
+
 	point := MetricPoint{
 		Timestamp: time.Now(),
 		CPU:       cpu,
 		Memory:    memory,
 	}
-	
+
 	ms.data[serviceName] = append(ms.data[serviceName], point)
-	
+
 	// Immediate cleanup if too many points (prevent memory leaks)
 	if len(ms.data[serviceName]) > 17280 { // 24h * 60min * 12 (5sec intervals)
 		ms.data[serviceName] = ms.data[serviceName][1:]
@@ -64,10 +64,10 @@ func (ms *MemoryStore) AddMetric(serviceName string, cpu, memory float64) {
 func (ms *MemoryStore) GetHistory(serviceNames []string, duration time.Duration) map[string]ServiceHistory {
 	ms.mutex.RLock()
 	defer ms.mutex.RUnlock()
-	
+
 	result := make(map[string]ServiceHistory)
 	since := time.Now().Add(-duration)
-	
+
 	for _, serviceName := range serviceNames {
 		dataPoints, exists := ms.data[serviceName]
 		if !exists {
@@ -79,7 +79,7 @@ func (ms *MemoryStore) GetHistory(serviceNames []string, duration time.Duration)
 			}
 			continue
 		}
-		
+
 		// Filter data points within time range
 		var filteredPoints []MetricPoint
 		for _, point := range dataPoints {
@@ -87,7 +87,7 @@ func (ms *MemoryStore) GetHistory(serviceNames []string, duration time.Duration)
 				filteredPoints = append(filteredPoints, point)
 			}
 		}
-		
+
 		// Determine status based on recent data
 		status := "stopped"
 		if len(filteredPoints) > 0 {
@@ -97,14 +97,14 @@ func (ms *MemoryStore) GetHistory(serviceNames []string, duration time.Duration)
 				status = "running"
 			}
 		}
-		
+
 		result[serviceName] = ServiceHistory{
 			ServiceName: serviceName,
 			Status:      status,
 			DataPoints:  filteredPoints,
 		}
 	}
-	
+
 	return result
 }
 
@@ -112,7 +112,7 @@ func (ms *MemoryStore) GetHistory(serviceNames []string, duration time.Duration)
 func (ms *MemoryStore) GetAllServices() []string {
 	ms.mutex.RLock()
 	defer ms.mutex.RUnlock()
-	
+
 	services := make([]string, 0, len(ms.data))
 	for serviceName := range ms.data {
 		services = append(services, serviceName)
@@ -124,7 +124,7 @@ func (ms *MemoryStore) GetAllServices() []string {
 func (ms *MemoryStore) cleanupRoutine() {
 	ticker := time.NewTicker(ms.interval)
 	defer ticker.Stop()
-	
+
 	for range ticker.C {
 		ms.cleanup()
 	}
@@ -134,9 +134,9 @@ func (ms *MemoryStore) cleanupRoutine() {
 func (ms *MemoryStore) cleanup() {
 	ms.mutex.Lock()
 	defer ms.mutex.Unlock()
-	
+
 	cutoff := time.Now().Add(-ms.maxAge)
-	
+
 	for serviceName, points := range ms.data {
 		// Find first point that should be kept
 		keepIndex := 0
@@ -146,12 +146,12 @@ func (ms *MemoryStore) cleanup() {
 				break
 			}
 		}
-		
+
 		// Keep only recent points
 		if keepIndex > 0 {
 			ms.data[serviceName] = points[keepIndex:]
 		}
-		
+
 		// Remove service entry if no data points left
 		if len(ms.data[serviceName]) == 0 {
 			delete(ms.data, serviceName)
@@ -160,16 +160,16 @@ func (ms *MemoryStore) cleanup() {
 }
 
 // GetStats returns storage statistics
-func (ms *MemoryStore) GetStats() map[string]interface{} {
+func (ms *MemoryStore) GetStats() map[string]any {
 	ms.mutex.RLock()
 	defer ms.mutex.RUnlock()
-	
+
 	totalPoints := 0
 	serviceCount := len(ms.data)
-	
+
 	oldestTime := time.Now()
 	newestTime := time.Time{}
-	
+
 	for _, points := range ms.data {
 		totalPoints += len(points)
 		if len(points) > 0 {
@@ -181,8 +181,8 @@ func (ms *MemoryStore) GetStats() map[string]interface{} {
 			}
 		}
 	}
-	
-	return map[string]interface{}{
+
+	return map[string]any{
 		"serviceCount": serviceCount,
 		"totalPoints":  totalPoints,
 		"oldestData":   oldestTime.Format(time.RFC3339),

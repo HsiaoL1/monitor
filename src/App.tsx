@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { Layout, Menu, Button, message } from 'antd';
-import { DashboardOutlined, ControlOutlined, CodeOutlined, DatabaseOutlined, UserOutlined, GlobalOutlined, LogoutOutlined, BarChartOutlined, LineChartOutlined, HistoryOutlined, MonitorOutlined, RocketOutlined, BranchesOutlined, FileTextOutlined, ToolOutlined, LaptopOutlined, PlayCircleOutlined, CloudServerOutlined, SettingOutlined } from '@ant-design/icons';
+import { DashboardOutlined, ControlOutlined, CodeOutlined, DatabaseOutlined, UserOutlined, GlobalOutlined, LogoutOutlined, BarChartOutlined, LineChartOutlined, HistoryOutlined, MonitorOutlined, RocketOutlined, BranchesOutlined, FileTextOutlined, ToolOutlined, LaptopOutlined, PlayCircleOutlined, CloudServerOutlined, SettingOutlined, DesktopOutlined, AppstoreOutlined } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import ResourceMonitor from './components/ResourceMonitor';
 import ResourceChart from './components/ResourceChart';
@@ -15,7 +15,8 @@ import ProxyReplaceLog from './components/ProxyReplaceLog';
 import CICDManager from './components/CICDManager';
 import TraceAnalysis from './components/TraceAnalysis';
 import LogAggregation from './components/ops/LogAggregation';
-import DeviceMonitor from './components/DeviceMonitor';
+import DeviceOverview from './components/DeviceOverview';
+import DeviceVersionMonitor from './components/DeviceVersionMonitor';
 import Login from './components/Login';
 import { checkAuth, logout } from './services/api';
 import AutoAccountRestartManager from './components/AutoAccountRestartManager';
@@ -43,6 +44,8 @@ const AppContent: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       setOpenKeys(['proxy']);
     } else if (path === '/browser-servers' || path === '/browser-server-monitor') {
       setOpenKeys(['browser-farm']);
+    } else if (path === '/device-overview' || path === '/device-version-monitor') {
+      setOpenKeys(['device']);
     }
   }, [location.pathname]);
 
@@ -102,9 +105,21 @@ const AppContent: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       label: 'Redis监控',
     },
     {
-      key: '/device-monitor',
+      key: 'device',
       icon: <LaptopOutlined />,
       label: '设备监控',
+      children: [
+        {
+          key: '/device-overview',
+          icon: <DesktopOutlined />,
+          label: '设备概览',
+        },
+        {
+          key: '/device-version-monitor',
+          icon: <AppstoreOutlined />,
+          label: '插件版本',
+        }
+      ]
     },
     {
       key: 'account',
@@ -219,7 +234,8 @@ const AppContent: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
               <Route path="/ops" element={<SystemOps />} />
               <Route path="/ops/log-aggregation" element={<LogAggregation />} />
               <Route path="/redis-monitor" element={<RedisMonitor />} />
-              <Route path="/device-monitor" element={<DeviceMonitor />} />
+              <Route path="/device-overview" element={<DeviceOverview />} />
+              <Route path="/device-version-monitor" element={<DeviceVersionMonitor />} />
               <Route path="/account-monitor" element={<AccountMonitor />} />
               <Route path="/account-sync-log" element={<AccountSyncLog />} />
               <Route path="/account-restart" element={<AutoAccountRestartManager />} />
