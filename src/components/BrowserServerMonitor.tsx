@@ -1,16 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  Table,
-  Button,
-  Space,
-  message,
-  Card,
-  Progress,
-} from 'antd';
-import { MonitorOutlined, ReloadOutlined } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
-import { getBrowserServerStats } from '../services/api';
-import { BrowserServerStat } from '../types';
+import React, { useState, useEffect, useCallback } from "react";
+import { Table, Button, Space, message, Card, Progress } from "antd";
+import { MonitorOutlined, ReloadOutlined } from "@ant-design/icons";
+import { useNavigate } from "react-router-dom";
+import { getBrowserServerStats } from "../services/api";
+import { BrowserServerStat } from "../types";
 
 const BrowserServerMonitor: React.FC = () => {
   const [stats, setStats] = useState<BrowserServerStat[]>([]);
@@ -24,10 +17,10 @@ const BrowserServerMonitor: React.FC = () => {
       if (res.success) {
         setStats(res.data);
       } else {
-        message.error('获取服务器统计数据失败');
+        message.error("获取服务器统计数据失败");
       }
     } catch (error) {
-      message.error('获取服务器统计数据失败');
+      message.error("获取服务器统计数据失败");
     } finally {
       setLoading(false);
     }
@@ -43,19 +36,19 @@ const BrowserServerMonitor: React.FC = () => {
 
   const columns = [
     {
-      title: 'ID',
-      dataIndex: 'id',
-      key: 'id',
+      title: "ID",
+      dataIndex: "id",
+      key: "id",
       width: 80,
     },
     {
-      title: '服务器名称',
-      dataIndex: 'name',
-      key: 'name',
+      title: "服务器名称",
+      dataIndex: "name",
+      key: "name",
     },
     {
-      title: '在线/最大数量',
-      key: 'usage',
+      title: "在线/最大数量",
+      key: "usage",
       render: (_: any, record: BrowserServerStat) => (
         <Space>
           <span>{`${record.online_account_count} / ${record.max_browser_count}`}</span>
@@ -63,18 +56,21 @@ const BrowserServerMonitor: React.FC = () => {
       ),
     },
     {
-      title: '使用率',
-      key: 'progress',
+      title: "使用率",
+      key: "progress",
       render: (_: any, record: BrowserServerStat) => {
-        const percent = record.max_browser_count > 0
-          ? Math.round((record.online_account_count / record.max_browser_count) * 100)
-          : 0;
+        const percent =
+          record.max_browser_count > 0
+            ? Math.round(
+                (record.online_account_count / record.max_browser_count) * 100,
+              )
+            : 0;
         return <Progress percent={percent} size="small" />;
       },
     },
     {
-      title: '操作',
-      key: 'action',
+      title: "操作",
+      key: "action",
       render: (_: any, record: BrowserServerStat) => (
         <Button type="link" onClick={() => handleViewAccounts(record)}>
           查看账号

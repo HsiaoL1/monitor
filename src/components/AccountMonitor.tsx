@@ -24,13 +24,11 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   ClockCircleOutlined,
-  SearchOutlined,
   SortAscendingOutlined,
   SortDescendingOutlined,
 } from "@ant-design/icons";
 import { fetchAccountMismatch, syncAccountStatus } from "../services/api";
 import { AccountStatusMismatch } from "../types";
-
 
 const AccountMonitor: React.FC = () => {
   const [loading, setLoading] = useState(false);

@@ -30,7 +30,7 @@ import { ProxyReplaceLogEntry } from "../types";
 import dayjs from "dayjs";
 
 const { RangePicker } = DatePicker;
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
 interface ProxyReplaceLogResponse {
   success: boolean;
@@ -97,7 +97,7 @@ const ProxyReplaceLog: React.FC = () => {
 
   useEffect(() => {
     fetchLogs();
-  }, [dateRange]);
+  });
 
   const getStatusTag = (success: boolean) => {
     return success ? (

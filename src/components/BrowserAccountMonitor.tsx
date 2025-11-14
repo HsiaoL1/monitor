@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Table,
   Card,
@@ -11,15 +11,23 @@ import {
   Col,
   message,
   Pagination,
-  Alert,
   Popconfirm,
   Modal,
-} from 'antd';
-import { SearchOutlined, ReloadOutlined, MonitorOutlined, PlayCircleOutlined } from '@ant-design/icons';
-import { useSearchParams } from 'react-router-dom';
-import { getBrowserAccounts, getBrowserServers, reloginBrowserAccounts } from '../services/api';
-import { BrowserAccountInfo, BrowserServer } from '../types';
-import dayjs from 'dayjs';
+} from "antd";
+import {
+  SearchOutlined,
+  ReloadOutlined,
+  MonitorOutlined,
+  PlayCircleOutlined,
+} from "@ant-design/icons";
+import { useSearchParams } from "react-router-dom";
+import {
+  getBrowserAccounts,
+  getBrowserServers,
+  reloginBrowserAccounts,
+} from "../services/api";
+import { BrowserAccountInfo, BrowserServer } from "../types";
+import dayjs from "dayjs";
 
 const { Option } = Select;
 
@@ -32,12 +40,11 @@ const BrowserAccountMonitor: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
 
-
   const [filters, setFilters] = useState({
-    web_client_no: searchParams.get('serverName') || '',
-    web_online_status: searchParams.get('onlineStatus') || '',
-    merchant_id: '',
-    dev_code: '',
+    web_client_no: searchParams.get("serverName") || "",
+    web_online_status: searchParams.get("onlineStatus") || "",
+    merchant_id: "",
+    dev_code: "",
     page: 1,
     page_size: 20,
   });
@@ -51,8 +58,8 @@ const BrowserAccountMonitor: React.FC = () => {
         page_size: filters.page_size,
       };
       // Remove empty filters
-      Object.keys(params).forEach(key => {
-        if (params[key as keyof typeof params] === '') {
+      Object.keys(params).forEach((key) => {
+        if (params[key as keyof typeof params] === "") {
           delete params[key as keyof typeof params];
         }
       });
@@ -62,10 +69,10 @@ const BrowserAccountMonitor: React.FC = () => {
         setAccounts(res.data);
         setTotal(res.total);
       } else {
-        message.error('获取账号列表失败');
+        message.error("获取账号列表失败");
       }
     } catch (error) {
-      message.error('获取账号列表失败');
+      message.error("获取账号列表失败");
     } finally {
       setLoading(false);
     }
@@ -78,7 +85,7 @@ const BrowserAccountMonitor: React.FC = () => {
         setServers(res.data);
       }
     } catch (error) {
-      console.error('Failed to fetch servers');
+      console.error("Failed to fetch servers");
     }
   };
 
@@ -91,15 +98,15 @@ const BrowserAccountMonitor: React.FC = () => {
   }, [fetchAccounts]);
 
   const handleFilterChange = (key: string, value: any) => {
-    setFilters(prev => ({ ...prev, [key]: value, page: 1 }));
+    setFilters((prev) => ({ ...prev, [key]: value, page: 1 }));
   };
 
   const handleReset = () => {
     setFilters({
-      web_client_no: '',
-      web_online_status: '',
-      merchant_id: '',
-      dev_code: '',
+      web_client_no: "",
+      web_online_status: "",
+      merchant_id: "",
+      dev_code: "",
       page: 1,
       page_size: 20,
     });
@@ -107,7 +114,7 @@ const BrowserAccountMonitor: React.FC = () => {
   };
 
   const handlePageChange = (page: number, pageSize?: number) => {
-    setFilters(prev => ({
+    setFilters((prev) => ({
       ...prev,
       page,
       page_size: pageSize || prev.page_size,
@@ -116,31 +123,35 @@ const BrowserAccountMonitor: React.FC = () => {
 
   const handleRelogin = async () => {
     if (selectedRowKeys.length === 0) {
-      message.warning('请至少选择一个账号');
+      message.warning("请至少选择一个账号");
       return;
     }
     setReloginLoading(true);
     try {
       const res = await reloginBrowserAccounts(selectedRowKeys as number[]);
       if (res.success) {
-        message.success(res.message || `成功将 ${res.queued_count} 个账号加入重新登录队列`);
+        message.success(
+          res.message || `成功将 ${res.queued_count} 个账号加入重新登录队列`,
+        );
         setSelectedRowKeys([]);
       } else {
-        message.error(res.message || '操作失败', 10);
+        message.error(res.message || "操作失败", 10);
         if (res.errors && res.errors.length > 0) {
           // Display detailed errors in a modal or expandable message
           Modal.error({
-            title: '批量重新登录时发生错误',
+            title: "批量重新登录时发生错误",
             content: (
-              <ul style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                {res.errors.map((e, i) => <li key={i}>{e}</li>)}
+              <ul style={{ maxHeight: "200px", overflowY: "auto" }}>
+                {res.errors.map((e, i) => (
+                  <li key={i}>{e}</li>
+                ))}
               </ul>
             ),
           });
         }
       }
     } catch (error) {
-      message.error('请求失败，请检查网络');
+      message.error("请求失败，请检查网络");
     } finally {
       setReloginLoading(false);
     }
@@ -148,44 +159,66 @@ const BrowserAccountMonitor: React.FC = () => {
 
   const getOnlineStatusTag = (status: number) => {
     const statusMap: Record<number, { text: string; color: string }> = {
-      0: { text: '离线', color: 'default' },
-      1: { text: '在线', color: 'success' },
-      2: { text: '上线中', color: 'processing' },
-      3: { text: '下线中', color: 'warning' },
+      0: { text: "离线", color: "default" },
+      1: { text: "在线", color: "success" },
+      2: { text: "上线中", color: "processing" },
+      3: { text: "下线中", color: "warning" },
     };
-    const s = statusMap[status] || { text: '未知', color: 'error' };
+    const s = statusMap[status] || { text: "未知", color: "error" };
     return <Tag color={s.color}>{s.text}</Tag>;
   };
 
   const getAccountStatusTag = (status: number) => {
     const statusMap: Record<number, { text: string; color: string }> = {
-        1: { text: '正常', color: 'success' },
-        2: { text: '封号', color: 'error' },
-        3: { text: '注销', color: 'warning' },
+      1: { text: "正常", color: "success" },
+      2: { text: "封号", color: "error" },
+      3: { text: "注销", color: "warning" },
     };
-    const s = statusMap[status] || { text: '未知', color: 'default' };
+    const s = statusMap[status] || { text: "未知", color: "default" };
     return <Tag color={s.color}>{s.text}</Tag>;
   };
 
   const getDeviceTypeTag = (type: number) => {
-    return type === 1 ? <Tag color="blue">盒子云机</Tag> : <Tag color="green">百度云机</Tag>;
+    return type === 1 ? (
+      <Tag color="blue">盒子云机</Tag>
+    ) : (
+      <Tag color="green">百度云机</Tag>
+    );
   };
 
   const columns = [
-    { title: 'ID', dataIndex: 'id', key: 'id', width: 80 },
-    { title: '账号', dataIndex: 'account', key: 'account' },
-    { title: '商户ID', dataIndex: 'merchant_id', key: 'merchant_id' },
-    { title: '服务器', dataIndex: 'web_client_no', key: 'web_client_no' },
-    { title: '在线状态', dataIndex: 'web_online_status', key: 'web_online_status', render: getOnlineStatusTag },
-    { title: '账号状态', dataIndex: 'account_status', key: 'account_status', render: getAccountStatusTag },
-    { title: '设备编码', dataIndex: 'dev_code', key: 'dev_code' },
-    { title: '设备类型', dataIndex: 'device_type', key: 'device_type', render: getDeviceTypeTag },
-    { title: '国家', dataIndex: 'country_code', key: 'country_code' },
+    { title: "ID", dataIndex: "id", key: "id", width: 80 },
+    { title: "账号", dataIndex: "account", key: "account" },
+    { title: "商户ID", dataIndex: "merchant_id", key: "merchant_id" },
+    { title: "服务器", dataIndex: "web_client_no", key: "web_client_no" },
     {
-      title: '心跳时间',
-      dataIndex: 'web_heart_time',
-      key: 'web_heart_time',
-      render: (text: string) => dayjs(text).isValid() && text !== '0001-01-01T00:00:00Z' ? dayjs(text).format('YYYY-MM-DD HH:mm:ss') : '-',
+      title: "在线状态",
+      dataIndex: "web_online_status",
+      key: "web_online_status",
+      render: getOnlineStatusTag,
+    },
+    {
+      title: "账号状态",
+      dataIndex: "account_status",
+      key: "account_status",
+      render: getAccountStatusTag,
+    },
+    { title: "设备编码", dataIndex: "dev_code", key: "dev_code" },
+    {
+      title: "设备类型",
+      dataIndex: "device_type",
+      key: "device_type",
+      render: getDeviceTypeTag,
+    },
+    { title: "国家", dataIndex: "country_code", key: "country_code" },
+    {
+      title: "心跳时间",
+      dataIndex: "web_heart_time",
+      key: "web_heart_time",
+      render: (text: string) =>
+        dayjs(text).isValid() && text !== "0001-01-01T00:00:00Z"
+          ? dayjs(text).format("YYYY-MM-DD HH:mm:ss")
+          : "-",
     },
   ];
 
@@ -205,7 +238,11 @@ const BrowserAccountMonitor: React.FC = () => {
         </Space>
       }
       extra={
-        <Button icon={<ReloadOutlined />} onClick={() => fetchAccounts()} loading={loading}>
+        <Button
+          icon={<ReloadOutlined />}
+          onClick={() => fetchAccounts()}
+          loading={loading}
+        >
           刷新
         </Button>
       }
@@ -215,13 +252,13 @@ const BrowserAccountMonitor: React.FC = () => {
           <Col span={6}>
             <Select
               placeholder="选择服务器"
-              style={{ width: '100%' }}
+              style={{ width: "100%" }}
               value={filters.web_client_no}
-              onChange={value => handleFilterChange('web_client_no', value)}
+              onChange={(value) => handleFilterChange("web_client_no", value)}
               showSearch
             >
               <Option value="">全部</Option>
-              {servers.map(s => (
+              {servers.map((s) => (
                 <Option key={s.id} value={s.name}>
                   {s.name}
                 </Option>
@@ -231,9 +268,11 @@ const BrowserAccountMonitor: React.FC = () => {
           <Col span={5}>
             <Select
               placeholder="在线状态"
-              style={{ width: '100%' }}
+              style={{ width: "100%" }}
               value={filters.web_online_status}
-              onChange={value => handleFilterChange('web_online_status', value)}
+              onChange={(value) =>
+                handleFilterChange("web_online_status", value)
+              }
             >
               <Option value="">全部</Option>
               <Option value="1">在线</Option>
@@ -244,19 +283,25 @@ const BrowserAccountMonitor: React.FC = () => {
             <Input
               placeholder="商户ID"
               value={filters.merchant_id}
-              onChange={e => handleFilterChange('merchant_id', e.target.value)}
+              onChange={(e) =>
+                handleFilterChange("merchant_id", e.target.value)
+              }
             />
           </Col>
           <Col span={5}>
             <Input
               placeholder="云机编码"
               value={filters.dev_code}
-              onChange={e => handleFilterChange('dev_code', e.target.value)}
+              onChange={(e) => handleFilterChange("dev_code", e.target.value)}
             />
           </Col>
           <Col span={3}>
             <Space>
-              <Button type="primary" icon={<SearchOutlined />} onClick={() => fetchAccounts()}>
+              <Button
+                type="primary"
+                icon={<SearchOutlined />}
+                onClick={() => fetchAccounts()}
+              >
                 搜索
               </Button>
               <Button onClick={handleReset}>重置</Button>
@@ -283,7 +328,11 @@ const BrowserAccountMonitor: React.FC = () => {
               批量重新登录
             </Button>
           </Popconfirm>
-          {hasSelected && <span style={{ marginLeft: 8 }}>已选择 {selectedRowKeys.length} 个账号</span>}
+          {hasSelected && (
+            <span style={{ marginLeft: 8 }}>
+              已选择 {selectedRowKeys.length} 个账号
+            </span>
+          )}
         </Space>
       </div>
 
@@ -302,8 +351,8 @@ const BrowserAccountMonitor: React.FC = () => {
         total={total}
         onChange={handlePageChange}
         showSizeChanger
-        showTotal={t => `共 ${t} 条`}
-        style={{ marginTop: 16, textAlign: 'right' }}
+        showTotal={(t) => `共 ${t} 条`}
+        style={{ marginTop: 16, textAlign: "right" }}
       />
     </Card>
   );

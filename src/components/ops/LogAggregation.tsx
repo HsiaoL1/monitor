@@ -13,13 +13,10 @@ import {
   Input,
   Select,
   DatePicker,
-  Checkbox,
-  Tooltip,
   Modal,
   Typography,
   Collapse,
   Switch,
-  Spin,
   Badge,
 } from "antd";
 import {
@@ -31,19 +28,15 @@ import {
   InfoCircleOutlined,
   WarningOutlined,
   StopOutlined,
-  PlayCircleOutlined,
   EyeOutlined,
   SettingOutlined,
-  ClockCircleOutlined,
   FileTextOutlined,
   ClearOutlined,
-  FullscreenOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 
 const { RangePicker } = DatePicker;
-const { TextArea } = Input;
-const { Text, Paragraph } = Typography;
+const { Text } = Typography;
 const { Panel } = Collapse;
 
 interface LogEntry {
@@ -76,7 +69,7 @@ const LogAggregation: React.FC = () => {
   const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
   const [logDetailVisible, setLogDetailVisible] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
-  const [realTimeMode, setRealTimeMode] = useState(false);
+  const [realTimeMode] = useState(false);
   const autoRefreshRef = useRef<NodeJS.Timeout | null>(null);
 
   // 查询参数状态
@@ -244,12 +237,12 @@ const LogAggregation: React.FC = () => {
     } else if (autoRefreshRef.current) {
       clearInterval(autoRefreshRef.current);
     }
-  }, [autoRefresh, query]);
+  });
 
   // 初始化加载
   useEffect(() => {
     searchLogs();
-  }, []);
+  });
 
   const getLevelTag = (level: string) => {
     const configs: { [key: string]: { color: string; icon: React.ReactNode } } =

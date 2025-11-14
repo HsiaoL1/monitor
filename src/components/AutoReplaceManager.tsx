@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Button, Tag, Spin, notification, Card, Typography } from "antd";
 import {
   getAutoReplaceStatus,
@@ -12,6 +12,7 @@ const AutoReplaceManager: React.FC = () => {
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>("正在获取状态...");
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const intervalIdRef = useRef<NodeJS.Timeout>();
 
   const fetchStatus = async () => {
     try {
@@ -24,18 +25,16 @@ const AutoReplaceManager: React.FC = () => {
       setStatusMessage("获取状态失败");
       console.error("Failed to fetch status", error);
       // Stop polling on error to avoid spamming
-      if (intervalId) clearInterval(intervalId);
+      if (intervalIdRef.current) clearInterval(intervalIdRef.current);
     } finally {
       setIsLoading(false);
     }
   };
 
-  let intervalId: NodeJS.Timeout;
-
   useEffect(() => {
     fetchStatus();
-    intervalId = setInterval(fetchStatus, 15000); // Poll every 15 seconds
-    return () => clearInterval(intervalId);
+    intervalIdRef.current = setInterval(fetchStatus, 15000); // Poll every 15 seconds
+    return () => clearInterval(intervalIdRef.current);
   }, []);
 
   const handleStart = async () => {
