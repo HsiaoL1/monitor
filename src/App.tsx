@@ -6,7 +6,7 @@ import {
   useNavigate,
   useLocation,
 } from "react-router-dom";
-import { Layout, Menu, Button, message } from "antd";
+import { Layout, Menu } from "antd";
 import {
   DashboardOutlined,
   ControlOutlined,
@@ -14,7 +14,6 @@ import {
   DatabaseOutlined,
   UserOutlined,
   GlobalOutlined,
-  LogoutOutlined,
   BarChartOutlined,
   LineChartOutlined,
   HistoryOutlined,
@@ -46,15 +45,15 @@ import LogAggregation from "./components/ops/LogAggregation";
 import DeviceOverview from "./components/DeviceOverview";
 import DeviceVersionMonitor from "./components/DeviceVersionMonitor";
 import Login from "./components/Login";
-import { checkAuth, logout } from "./services/api";
+import { checkAuth } from "./services/api";
 import AutoAccountRestartManager from "./components/AutoAccountRestartManager";
 import BrowserServerManager from "./components/BrowserServerManager";
 import BrowserServerMonitor from "./components/BrowserServerMonitor";
 import BrowserAccountMonitor from "./components/BrowserAccountMonitor";
 
-const { Header, Sider, Content } = Layout;
+const { Sider, Content } = Layout;
 
-const AppContent: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
+const AppContent: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [openKeys, setOpenKeys] = useState<string[]>([]);
@@ -86,16 +85,6 @@ const AppContent: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       setOpenKeys(["device"]);
     }
   }, [location.pathname]);
-
-  const handleLogout = async () => {
-    try {
-      await logout();
-      message.success("登出成功");
-      onLogout();
-    } catch (error) {
-      message.error("登出失败");
-    }
-  };
 
   const menuItems: MenuProps["items"] = [
     {
@@ -243,21 +232,6 @@ const AppContent: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
-      <Header
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          color: "white",
-          fontSize: "18px",
-          fontWeight: "bold",
-        }}
-      >
-        服务器管理控制台
-        <Button type="primary" icon={<LogoutOutlined />} onClick={handleLogout}>
-          登出
-        </Button>
-      </Header>
       <Layout>
         <Sider width={200} theme="light">
           <Menu
@@ -338,10 +312,6 @@ const App: React.FC = () => {
     setIsAuthenticated(true);
   };
 
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-  };
-
   if (isAuthenticated === null) {
     return null; // 或者一个加载中的组件
   }
@@ -349,7 +319,7 @@ const App: React.FC = () => {
   return (
     <Router>
       {isAuthenticated ? (
-        <AppContent onLogout={handleLogout} />
+        <AppContent />
       ) : (
         <Login onLoginSuccess={handleLoginSuccess} />
       )}

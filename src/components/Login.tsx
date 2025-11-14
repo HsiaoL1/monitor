@@ -1,9 +1,13 @@
 import React, { useState } from "react";
 import { Form, Input, Button, Card, message, Row, Col, Typography } from "antd";
-import { UserOutlined, LockOutlined } from "@ant-design/icons";
+import {
+  UserOutlined,
+  LockOutlined,
+  DashboardOutlined,
+} from "@ant-design/icons";
 import { login } from "../services/api";
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
 
 interface Props {
   onLoginSuccess: () => void;
@@ -36,9 +40,23 @@ const Login: React.FC<Props> = ({ onLoginSuccess }) => {
       style={{ minHeight: "100vh", background: "#f0f2f5" }}
     >
       <Col>
-        <Card style={{ width: 400, boxShadow: "0 4px 8px 0 rgba(0,0,0,0.2)" }}>
-          <div style={{ textAlign: "center", marginBottom: "24px" }}>
+        <Card
+          style={{
+            width: 400,
+            boxShadow: "0 4px 8px 0 rgba(0,0,0,0.2)",
+            borderRadius: "8px",
+          }}
+        >
+          <div style={{ textAlign: "center", marginBottom: "32px" }}>
+            <DashboardOutlined
+              style={{
+                fontSize: "48px",
+                color: "#1890ff",
+                marginBottom: "16px",
+              }}
+            />
             <Title level={2}>服务器管理控制台</Title>
+            <Text type="secondary">一个用于监控和管理各类资源的后台</Text>
           </div>
           <Form
             name="normal_login"
@@ -49,13 +67,21 @@ const Login: React.FC<Props> = ({ onLoginSuccess }) => {
               name="username"
               rules={[{ required: true, message: "请输入用户名!" }]}
             >
-              <Input prefix={<UserOutlined />} placeholder="用户名" />
+              <Input
+                prefix={<UserOutlined />}
+                placeholder="用户名"
+                size="large"
+              />
             </Form.Item>
             <Form.Item
               name="password"
               rules={[{ required: true, message: "请输入密码!" }]}
             >
-              <Input.Password prefix={<LockOutlined />} placeholder="密码" />
+              <Input.Password
+                prefix={<LockOutlined />}
+                placeholder="密码"
+                size="large"
+              />
             </Form.Item>
 
             <Form.Item>
@@ -64,6 +90,7 @@ const Login: React.FC<Props> = ({ onLoginSuccess }) => {
                 htmlType="submit"
                 loading={loading}
                 style={{ width: "100%" }}
+                size="large"
               >
                 登录
               </Button>
