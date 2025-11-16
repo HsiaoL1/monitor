@@ -125,6 +125,13 @@ func SetupRouter() *gin.Engine {
 
 			auth.GET("/device-app-versions", GetDeviceAppVersionsHandler)
 
+			// Batch update routes
+			batchGroup := auth.Group("/v1/internal/cloud/batch")
+			{
+				batchGroup.POST("/update_app_external", BatchUpdateAppExternalHandler)
+				batchGroup.POST("/update_plugin_external", BatchUpdatePluginExternalHandler)
+			}
+
 			// Pprof routes
 			auth.GET("/pprof/:serviceName/flamegraph", PprofFlamegraphHandler)
 

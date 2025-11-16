@@ -11,14 +11,22 @@ import {
   Col,
   message,
   Pagination,
+  Dropdown,
+  Modal,
 } from "antd";
 import {
   SearchOutlined,
   ReloadOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
+  DownOutlined,
+  ThunderboltOutlined,
 } from "@ant-design/icons";
-import { fetchDeviceVersions } from "../services/api";
+import {
+  fetchDeviceVersions,
+  batchUpdateApp,
+  batchUpdatePlugin,
+} from "../services/api";
 import { DeviceVersion, DeviceVersionResponse } from "../types";
 
 const { Option } = Select;
@@ -27,6 +35,8 @@ const DeviceVersionMonitor: React.FC = () => {
   const [data, setData] = useState<DeviceVersion[]>([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
+  const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
+  const [batchUpdateLoading, setBatchUpdateLoading] = useState(false);
 
   const [filters, setFilters] = useState({
     search_query: "",
@@ -103,6 +113,135 @@ const DeviceVersionMonitor: React.FC = () => {
     );
   };
 
+  const batchUpdate = async (type: "app" | "plugin") => {
+    if (selectedRowKeys.length === 0) {
+      message.warning("请选择要更新的设备");
+      return;
+    }
+
+    if (batchUpdateLoading) {
+      message.warning("请等待当前操作完成后再发起新的批量更新");
+      return;
+    }
+
+    const selectedDevices = data.filter((device) =>
+      selectedRowKeys.includes(device.dev_code),
+    );
+
+    // 按merchant_id分组
+    const devicesByMerchant = selectedDevices.reduce(
+      (groups, device) => {
+        const key = device.merchant_id;
+        if (!groups[key]) {
+          groups[key] = [];
+        }
+        groups[key].push(device);
+        return groups;
+      },
+      {} as { [key: number]: DeviceVersion[] },
+    );
+
+    Modal.confirm({
+      title: `确认批量更新${type === "app" ? "App" : "插件"}`,
+      content: `将对选中的 ${selectedRowKeys.length} 台设备执行批量更新操作，涉及 ${Object.keys(devicesByMerchant).length} 个商户。确认继续？`,
+      onOk: async () => {
+        setBatchUpdateLoading(true);
+        try {
+          const promises = Object.entries(devicesByMerchant).map(
+            async ([merchantId, devices]) => {
+              const deviceIds = devices.map((device) => {
+                // 这里需要获取device的真实ID，暂时用dev_code的hash作为ID
+                return parseInt(device.dev_code.replace(/\D/g, "")) || 1;
+              });
+
+              const payload = {
+                device_type: devices[0].device_type,
+                merchant_id: parseInt(merchantId),
+                ids: deviceIds,
+              };
+
+              try {
+                const result =
+                  type === "app"
+                    ? await batchUpdateApp(payload)
+                    : await batchUpdatePlugin({ ...payload, platform_id: 1 });
+                return {
+                  merchantId,
+                  success: result.code === 200,
+                  message: result.message,
+                };
+              } catch (error: any) {
+                return {
+                  merchantId,
+                  success: false,
+                  message: error.message || "请求失败",
+                };
+              }
+            },
+          );
+
+          const results = await Promise.all(promises);
+          const successCount = results.filter((r) => r.success).length;
+          const totalMerchants = results.length;
+
+          if (successCount === totalMerchants) {
+            message.success(
+              `批量更新${type === "app" ? "App" : "插件"}请求已提交，后台正在执行，请耐心等待`,
+            );
+          } else {
+            message.warning(
+              `${successCount}/${totalMerchants} 个商户的更新请求提交成功，请查看具体错误信息`,
+            );
+          }
+
+          setSelectedRowKeys([]);
+        } catch (error) {
+          message.error(
+            `批量更新${type === "app" ? "App" : "插件"}失败: ${error}`,
+          );
+        } finally {
+          setBatchUpdateLoading(false);
+        }
+      },
+    });
+  };
+
+  const batchMenuItems = [
+    {
+      key: "app",
+      label: "批量更新App",
+      onClick: () => batchUpdate("app"),
+    },
+    {
+      key: "plugin",
+      label: "批量更新插件",
+      onClick: () => batchUpdate("plugin"),
+    },
+  ];
+
+  const rowSelection = {
+    selectedRowKeys,
+    onChange: (selectedKeys: React.Key[]) => {
+      setSelectedRowKeys(selectedKeys as string[]);
+    },
+    onSelectAll: (
+      selected: boolean,
+      selectedRows: DeviceVersion[],
+      changeRows: DeviceVersion[],
+    ) => {
+      // 只选择当前页面的数据
+      if (selected) {
+        const currentPageKeys = data.map((item) => item.dev_code);
+        setSelectedRowKeys(currentPageKeys);
+      } else {
+        setSelectedRowKeys([]);
+      }
+    },
+    getCheckboxProps: (record: DeviceVersion) => ({
+      name: record.dev_code,
+    }),
+  };
+
   const columns = [
     {
       title: "设备编码",
@@ -162,13 +301,23 @@ const DeviceVersionMonitor: React.FC = () => {
     <Card
       title="设备App/插件版本监控"
       extra={
-        <Button
-          icon={<ReloadOutlined />}
-          onClick={() => fetchData()}
-          loading={loading}
-        >
-          刷新
-        </Button>
+        <Space>
+          <Dropdown
+            menu={{ items: batchMenuItems }}
+            disabled={batchUpdateLoading}
+          >
+            <Button icon={<ThunderboltOutlined />} loading={batchUpdateLoading}>
+              批量操作 <DownOutlined />
+            </Button>
+          </Dropdown>
+          <Button
+            icon={<ReloadOutlined />}
+            onClick={() => fetchData()}
+            loading={loading}
+          >
+            刷新
+          </Button>
+        </Space>
       }
     >
       <Card style={{ marginBottom: 16 }}>
@@ -248,6 +397,7 @@ const DeviceVersionMonitor: React.FC = () => {
         loading={loading}
         pagination={false}
         scroll={{ x: 1200 }}
+        rowSelection={rowSelection}
       />
       <Pagination
         current={filters.page}

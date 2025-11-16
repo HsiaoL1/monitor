@@ -752,5 +752,34 @@ export const reloginBrowserAccounts = async (
   }
 };
 
+export const batchUpdateApp = async (payload: {
+  device_type: number;
+  merchant_id: number;
+  ids: number[];
+}) => {
+  try {
+    const response = await api.post("/v1/internal/cloud/batch/update_app_external", payload);
+    return response.data;
+  } catch (error: any) {
+    console.error("Failed to batch update app:", error);
+    throw error;
+  }
+};
+
+export const batchUpdatePlugin = async (payload: {
+  device_type: number;
+  merchant_id: number;
+  ids: number[];
+  platform_id: number;
+}) => {
+  try {
+    const response = await api.post("/v1/internal/cloud/batch/update_plugin_external", payload);
+    return response.data;
+  } catch (error: any) {
+    console.error("Failed to batch update plugin:", error);
+    throw error;
+  }
+};
+
 // 默认导出axios实例供组件直接使用
 export default api;

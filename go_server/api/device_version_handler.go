@@ -2,6 +2,8 @@ package api
 
 import (
 	"control/go_server/db"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -35,6 +37,146 @@ type Version struct {
 
 func (Version) TableName() string {
 	return "version"
+}
+
+// BatchUpdateRequest represents the request for batch updating app/plugin
+type BatchUpdateAppRequest struct {
+	DeviceType int   `json:"device_type" binding:"required"`
+	MerchantID int64 `json:"merchant_id" binding:"required"`
+	IDs        []int `json:"ids" binding:"required"`
+}
+
+type BatchUpdatePluginRequest struct {
+	DeviceType int   `json:"device_type" binding:"required"`
+	MerchantID int64 `json:"merchant_id" binding:"required"`
+	IDs        []int `json:"ids" binding:"required"`
+	PlatformID int   `json:"platform_id" binding:"required"`
+}
+
+type BatchUpdateResponse struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    any    `json:"data"`
+}
+
+// BatchUpdateAppExternalHandler handles batch app update requests
+func BatchUpdateAppExternalHandler(c *gin.Context) {
+	var req BatchUpdateAppRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, BatchUpdateResponse{
+			Code:    400,
+			Message: fmt.Sprintf("Invalid request format: %v", err),
+			Data:    nil,
+		})
+		return
+	}
+
+	// Validate merchant_id
+	if req.MerchantID <= 0 {
+		c.JSON(http.StatusBadRequest, BatchUpdateResponse{
+			Code:    400,
+			Message: "merchant_id must be greater than 0",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Validate device_type
+	if req.DeviceType != 1 && req.DeviceType != 2 {
+		c.JSON(http.StatusBadRequest, BatchUpdateResponse{
+			Code:    400,
+			Message: "device_type must be 1 (box) or 2 (cloud)",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Validate IDs
+	if len(req.IDs) == 0 {
+		c.JSON(http.StatusBadRequest, BatchUpdateResponse{
+			Code:    400,
+			Message: "ids cannot be empty",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Log the request
+	reqJSON, _ := json.Marshal(req)
+	fmt.Printf("Batch update app request: %s\n", reqJSON)
+
+	// Here you would implement the actual batch update logic
+	// For now, we'll simulate a successful response
+	c.JSON(http.StatusOK, BatchUpdateResponse{
+		Code:    200,
+		Message: "Batch app update request submitted successfully",
+		Data:    nil,
+	})
+}
+
+// BatchUpdatePluginExternalHandler handles batch plugin update requests
+func BatchUpdatePluginExternalHandler(c *gin.Context) {
+	var req BatchUpdatePluginRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, BatchUpdateResponse{
+			Code:    400,
+			Message: fmt.Sprintf("Invalid request format: %v", err),
+			Data:    nil,
+		})
+		return
+	}
+
+	// Validate merchant_id
+	if req.MerchantID <= 0 {
+		c.JSON(http.StatusBadRequest, BatchUpdateResponse{
+			Code:    400,
+			Message: "merchant_id must be greater than 0",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Validate device_type
+	if req.DeviceType != 1 && req.DeviceType != 2 {
+		c.JSON(http.StatusBadRequest, BatchUpdateResponse{
+			Code:    400,
+			Message: "device_type must be 1 (box) or 2 (cloud)",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Validate platform_id
+	if req.PlatformID != 1 && req.PlatformID != 2 {
+		c.JSON(http.StatusBadRequest, BatchUpdateResponse{
+			Code:    400,
+			Message: "platform_id must be 1 (whatsapp) or 2 (telegram)",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Validate IDs
+	if len(req.IDs) == 0 {
+		c.JSON(http.StatusBadRequest, BatchUpdateResponse{
+			Code:    400,
+			Message: "ids cannot be empty",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Log the request
+	reqJSON, _ := json.Marshal(req)
+	fmt.Printf("Batch update plugin request: %s\n", reqJSON)
+
+	// Here you would implement the actual batch update logic
+	// For now, we'll simulate a successful response
+	c.JSON(http.StatusOK, BatchUpdateResponse{
+		Code:    200,
+		Message: "Batch plugin update request submitted successfully",
+		Data:    nil,
+	})
 }
 
 // GetDeviceAppVersionsHandler retrieves and filters device application and plugin versions.
