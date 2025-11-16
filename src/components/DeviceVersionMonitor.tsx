@@ -204,6 +204,8 @@ const DeviceVersionMonitor: React.FC = () => {
               <Option value="all">全部状态</Option>
               <Option value="app_outdated">App需更新</Option>
               <Option value="plugin_outdated">插件需更新</Option>
+              <Option value="all_outdated">全部需要更新</Option>
+              <Option value="all_updated">全部不需要更新</Option>
             </Select>
           </Col>
           <Col span={4}>

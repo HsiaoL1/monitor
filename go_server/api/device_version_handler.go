@@ -112,11 +112,17 @@ func GetDeviceAppVersionsHandler(c *gin.Context) {
 
 	switch versionStatus {
 	case "app_outdated":
-		havingConditions = append(havingConditions, "(personal_app_version != ? AND personal_app_version != '') OR (business_app_version != ? AND business_app_version != '')")
+		havingConditions = append(havingConditions, "(personal_app_version != ? OR business_app_version != ?)")
 		havingArgs = append(havingArgs, latestVersions.WhatsappPerson, latestVersions.WhatsappBusiness)
 	case "plugin_outdated":
-		havingConditions = append(havingConditions, "(personal_plugin_version != ? AND personal_plugin_version != '') OR (business_plugin_version != ? AND business_plugin_version != '')")
+		havingConditions = append(havingConditions, "(personal_plugin_version != ? OR business_plugin_version != ?)")
 		havingArgs = append(havingArgs, latestVersions.WhatsappPersonPlugin, latestVersions.WhatsappBusinessPlugin)
+	case "all_outdated":
+		havingConditions = append(havingConditions, "(personal_app_version != ? OR business_app_version != ? OR personal_plugin_version != ? OR business_plugin_version != ?)")
+		havingArgs = append(havingArgs, latestVersions.WhatsappPerson, latestVersions.WhatsappBusiness, latestVersions.WhatsappPersonPlugin, latestVersions.WhatsappBusinessPlugin)
+	case "all_updated":
+		havingConditions = append(havingConditions, "(personal_app_version = ? AND business_app_version = ? AND personal_plugin_version = ? AND business_plugin_version = ?)")
+		havingArgs = append(havingArgs, latestVersions.WhatsappPerson, latestVersions.WhatsappBusiness, latestVersions.WhatsappPersonPlugin, latestVersions.WhatsappBusinessPlugin)
 	}
 
 	if len(havingConditions) > 0 {
