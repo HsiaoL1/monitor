@@ -358,6 +358,16 @@ func executeAccountRestart() {
 		// 	continue
 		// }
 
+		// 如果账号的心跳时间不在今天，跳过
+		if onlineInfo.HeartbeatTime > 0 {
+			heartbeatDate := time.Unix(onlineInfo.HeartbeatTime, 0).Format("2006-01-02")
+			currentDate := time.Now().Format("2006-01-02")
+			if heartbeatDate != currentDate {
+				log.Printf("信息: 账号 %s 的最后心跳时间 %s 不在今天，跳过重启。", userKey, heartbeatDate)
+				continue
+			}
+		}
+
 		// 4. 重启频率限制检查
 		redisCtx := context.Background()
 		redisKey := fmt.Sprintf("account:restart:count:%s", userKey)
