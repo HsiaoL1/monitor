@@ -258,7 +258,7 @@ func executeAccountRestart() {
 	// 获取所有有dev_code且状态正常的社媒账号
 	var accounts []SocialAccount
 	if err := db.G.Table("social_accounts").
-		Where("deleted_at IS NULL AND dev_code IS NOT NULL AND dev_code != '' AND account_status = 1").
+		Where("deleted_at IS NULL AND dev_code IS NOT NULL AND dev_code != '' AND account_status = 1 AND online_status = 0").
 		Select("id, merchant_id, account, app_unique_id, platform_id, online_status, account_status, dev_code,account_type").
 		Scan(&accounts).Error; err != nil {
 		log.Printf("错误: 获取社媒账号失败: %v", err)
