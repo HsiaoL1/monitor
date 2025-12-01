@@ -71,6 +71,7 @@ func CreateBrowserServerHandler(c *gin.Context) {
 	server := models.BrowserServer{
 		Name:            req.Name,
 		MaxBrowserCount: req.MaxBrowserCount,
+		IsEnabled:       req.IsEnabled,
 	}
 	if err := db.G.Create(&server).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to create server, maybe name already exists?"})
@@ -131,6 +132,7 @@ func UpdateBrowserServerHandler(c *gin.Context) {
 	updates := map[string]any{
 		"name":              req.Name,
 		"max_browser_count": req.MaxBrowserCount,
+		"is_enabled":        req.IsEnabled,
 	}
 	if err := db.G.Model(&models.BrowserServer{}).Where("id = ?", id).Updates(updates).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to update server"})
@@ -203,6 +205,32 @@ func DeleteBrowserServerHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// BatchUpdateBrowserServerStatusHandler updates the is_enabled status for multiple servers
+func BatchUpdateBrowserServerStatusHandler(c *gin.Context) {
+	var req struct {
+		IDs       []int64 `json:"ids" binding:"required"`
+		IsEnabled bool    `json:"is_enabled"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid request"})
+		return
+	}
+
+	if len(req.IDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "No server IDs provided"})
+		return
+	}
+
+	if err := db.G.Model(&models.BrowserServer{}).
+		Where("id IN ?", req.IDs).
+		Update("is_enabled", req.IsEnabled).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to update servers"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": fmt.Sprintf("Successfully updated %d server(s)", len(req.IDs))})
 }
 
 // GetBrowserServerStatsHandler retrieves all servers with their online account counts from the database.

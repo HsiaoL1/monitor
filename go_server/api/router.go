@@ -142,6 +142,7 @@ func SetupRouter() *gin.Engine {
 				browserServerGroup.POST("", CreateBrowserServerHandler)
 				browserServerGroup.PUT("/:id", UpdateBrowserServerHandler)
 				browserServerGroup.DELETE("/:id", DeleteBrowserServerHandler)
+				browserServerGroup.POST("/batch-update-status", BatchUpdateBrowserServerStatusHandler)
 				browserServerGroup.GET("/stats", GetBrowserServerStatsHandler)
 			}
 			auth.GET("/browser-accounts", GetBrowserAccountsHandler)

@@ -683,6 +683,7 @@ export const getBrowserServers = async (): Promise<{
 export const createBrowserServer = async (server: {
   name: string;
   max_browser_count: number;
+  is_enabled?: boolean;
 }): Promise<{ success: boolean; data: BrowserServer }> => {
   const response = await api.post("/browser-servers", server);
   return response.data;
@@ -690,9 +691,20 @@ export const createBrowserServer = async (server: {
 
 export const updateBrowserServer = async (
   id: number,
-  server: { name: string; max_browser_count: number },
+  server: { name: string; max_browser_count: number; is_enabled?: boolean },
 ): Promise<{ success: boolean }> => {
   const response = await api.put(`/browser-servers/${id}`, server);
+  return response.data;
+};
+
+export const batchUpdateBrowserServerStatus = async (
+  ids: number[],
+  isEnabled: boolean,
+): Promise<{ success: boolean; message?: string }> => {
+  const response = await api.post("/browser-servers/batch-update-status", {
+    ids,
+    is_enabled: isEnabled,
+  });
   return response.data;
 };
 

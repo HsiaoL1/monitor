@@ -11,6 +11,7 @@ import {
   Popconfirm,
   Card,
   Tooltip,
+  Switch,
 } from "antd";
 import {
   PlusOutlined,
@@ -24,6 +25,7 @@ import {
   createBrowserServer,
   updateBrowserServer,
   deleteBrowserServer,
+  batchUpdateBrowserServerStatus,
 } from "../services/api";
 import { BrowserServer } from "../types";
 
@@ -34,6 +36,7 @@ const BrowserServerManager: React.FC = () => {
   const [editingServer, setEditingServer] = useState<BrowserServer | null>(
     null,
   );
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [form] = Form.useForm();
 
   const fetchServers = useCallback(async () => {
@@ -95,6 +98,42 @@ const BrowserServerManager: React.FC = () => {
     }
   };
 
+  const handleBatchEnable = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning("请先选择要启用的服务器");
+      return;
+    }
+    try {
+      await batchUpdateBrowserServerStatus(
+        selectedRowKeys as number[],
+        true,
+      );
+      message.success(`成功启用 ${selectedRowKeys.length} 个服务器`);
+      setSelectedRowKeys([]);
+      fetchServers();
+    } catch (error: any) {
+      message.error(error?.response?.data?.error || "批量启用失败");
+    }
+  };
+
+  const handleBatchDisable = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning("请先选择要禁用的服务器");
+      return;
+    }
+    try {
+      await batchUpdateBrowserServerStatus(
+        selectedRowKeys as number[],
+        false,
+      );
+      message.success(`成功禁用 ${selectedRowKeys.length} 个服务器`);
+      setSelectedRowKeys([]);
+      fetchServers();
+    } catch (error: any) {
+      message.error(error?.response?.data?.error || "批量禁用失败");
+    }
+  };
+
   const columns = [
     {
       title: "ID",
@@ -111,6 +150,17 @@ const BrowserServerManager: React.FC = () => {
       title: "最大浏览器数",
       dataIndex: "max_browser_count",
       key: "max_browser_count",
+    },
+    {
+      title: "状态",
+      dataIndex: "is_enabled",
+      key: "is_enabled",
+      width: 100,
+      render: (enabled: boolean) => (
+        <span style={{ color: enabled ? "#52c41a" : "#ff4d4f" }}>
+          {enabled ? "启用" : "禁用"}
+        </span>
+      ),
     },
     {
       title: "创建时间",
@@ -155,6 +205,20 @@ const BrowserServerManager: React.FC = () => {
       }
       extra={
         <Space>
+          <Button
+            type="primary"
+            disabled={selectedRowKeys.length === 0}
+            onClick={handleBatchEnable}
+          >
+            批量启用
+          </Button>
+          <Button
+            danger
+            disabled={selectedRowKeys.length === 0}
+            onClick={handleBatchDisable}
+          >
+            批量禁用
+          </Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
             添加服务器
           </Button>
@@ -172,6 +236,10 @@ const BrowserServerManager: React.FC = () => {
         rowKey="id"
         loading={loading}
         pagination={{ pageSize: 10 }}
+        rowSelection={{
+          selectedRowKeys,
+          onChange: setSelectedRowKeys,
+        }}
       />
       <Modal
         title={editingServer ? "编辑服务器" : "添加服务器"}
@@ -194,6 +262,14 @@ const BrowserServerManager: React.FC = () => {
             rules={[{ required: true, message: "请输入最大浏览器数" }]}
           >
             <InputNumber min={1} style={{ width: "100%" }} />
+          </Form.Item>
+          <Form.Item
+            name="is_enabled"
+            label="是否启用"
+            valuePropName="checked"
+            initialValue={true}
+          >
+            <Switch />
           </Form.Item>
         </Form>
       </Modal>

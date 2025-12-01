@@ -298,6 +298,7 @@ export interface BrowserServer {
   id: number;
   name: string;
   max_browser_count: number;
+  is_enabled: boolean;
   created_at: string;
 }
 
