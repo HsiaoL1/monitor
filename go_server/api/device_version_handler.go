@@ -241,7 +241,7 @@ func GetDeviceAppVersionsHandler(c *gin.Context) {
 
 	// --- Apply HAVING clauses for version-based filters ---
 	var havingConditions []string
-	var havingArgs []interface{}
+	var havingArgs []any
 
 	if appVersion != "" {
 		havingConditions = append(havingConditions, "(personal_app_version LIKE ? OR business_app_version LIKE ?)")

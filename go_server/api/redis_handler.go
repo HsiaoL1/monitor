@@ -19,6 +19,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
+	"gorm.io/gorm/clause"
 )
 
 const (
@@ -1738,12 +1739,12 @@ func FindReplacementProxyHandler(c *gin.Context) {
 
 // findAvailableReplacement 查找可用的替代代理
 func findAvailableReplacement(merchantID int64, excludeProxyID int64, contry_code string) (ProxyInfo, bool, error) {
-	// 获取同merchant_id的所有代理，排除当前代理
+	// 获取同merchant_id的所有代理，排除当前代理，且status != 1 (未被使用)
 	var proxies []ProxyInfo
 	err := db.G.Table("proxy").
-		Where("merchant_id = ? AND id != ? AND  deleted_at IS NULL", merchantID, excludeProxyID).
+		Where("merchant_id = ? AND id != ? AND deleted_at IS NULL", merchantID, excludeProxyID).
 		Where("country_code = ?", contry_code).
-		Where("status = ?", 0).
+		Where("status != ?", 1).
 		Scan(&proxies).Error
 	if err != nil {
 		return ProxyInfo{}, false, err
@@ -1751,29 +1752,76 @@ func findAvailableReplacement(merchantID int64, excludeProxyID int64, contry_cod
 
 	// 测试每个代理的可用性，返回第一个可用的
 	for _, proxy := range proxies {
-		// 为了避免最后都使用同一个代理，排除已经超过两个机器使用的代理
-		// var usageCount int64
-		// err := db.G.Table("ai_box_device").
-		// 	Where("proxy_id = ? AND deleted_at IS NULL", proxy.ID).
-		// 	Count(&usageCount).Error
-		// if err == nil && usageCount == 0 {
-		// 	err := db.G.Table("cloud_device").
-		// 		Where("proxy_id = ? AND deleted_at IS NULL", proxy.ID).
-		// 		Count(&usageCount).Error
-		// 	if err != nil {
-		// 		return ProxyInfo{}, false, err
-		// 	}
-		// }
-		// if usageCount >= 2 {
-		// 	continue
-		// }
 		isAvailable, _, _, _ := checkProxyAvailability(proxy)
 		if isAvailable {
-			return proxy, true, nil
+			// 使用数据库行锁来防止并发竞态问题
+			// 开启事务并使用 SELECT FOR UPDATE 锁定该代理
+			tx := db.G.Begin()
+			var lockedProxy ProxyInfo
+			err := tx.Table("proxy").
+				Where("id = ? AND status != ? AND deleted_at IS NULL", proxy.ID, 1).
+				Clauses(clause.Locking{Strength: "UPDATE"}).
+				First(&lockedProxy).Error
+
+			if err != nil {
+				tx.Rollback()
+				// 如果该代理已被其他并发操作占用，继续尝试下一个
+				continue
+			}
+
+			// 更新代理状态为1（正在使用）
+			err = tx.Table("proxy").
+				Where("id = ?", proxy.ID).
+				Update("status", 1).Error
+
+			if err != nil {
+				tx.Rollback()
+				continue
+			}
+
+			// 提交事务
+			if err := tx.Commit().Error; err != nil {
+				continue
+			}
+
+			return lockedProxy, true, nil
 		}
 	}
 
 	return ProxyInfo{}, false, nil
+}
+
+// releaseProxyStatus 释放代理的占用状态（将status设置为0，清空device_id和device_type）
+func releaseProxyStatus(proxyID int64) {
+	err := db.G.Table("proxy").
+		Where("id = ?", proxyID).
+		Updates(map[string]any{
+			"status":      0,
+			"device_id":   "",
+			"device_type": 0,
+		}).Error
+	if err != nil {
+		log.Printf("警告: 释放代理 %d 状态失败: %v", proxyID, err)
+	} else {
+		log.Printf("已释放代理 %d 的占用状态", proxyID)
+	}
+}
+
+// assignProxyToDevice 将代理分配给设备（更新status=1, device_id和device_type）
+func assignProxyToDevice(proxyID int64, deviceID int64, deviceType int) error {
+	err := db.G.Table("proxy").
+		Where("id = ?", proxyID).
+		Updates(map[string]any{
+			"status":      1,
+			"device_id":   fmt.Sprintf("%d", deviceID),
+			"device_type": deviceType,
+		}).Error
+	if err != nil {
+		log.Printf("错误: 分配代理 %d 给设备 %d (类型: %d) 失败: %v", proxyID, deviceID, deviceType, err)
+		return err
+	}
+	log.Printf("已分配代理 %d 给设备 %d (类型: %d)", proxyID, deviceID, deviceType)
+	return nil
 }
 
 // ReplaceProxyHandler 一键更换代理
@@ -1847,13 +1895,44 @@ func ReplaceProxyHandler(c *gin.Context) {
 
 	// 验证新代理存在且可用
 	var newProxy ProxyInfo
-	err = db.G.Table("proxy").
-		Where("id = ? AND deleted_at IS NULL", req.NewProxyID).
+
+	// 使用事务和锁来选择新代理，防止并发使用同一个代理
+	tx := db.G.Begin()
+	err = tx.Table("proxy").
+		Where("id = ? AND status != ? AND deleted_at IS NULL", req.NewProxyID, 1).
+		Clauses(clause.Locking{Strength: "UPDATE"}).
 		First(&newProxy).Error
+
 	if err != nil {
+		tx.Rollback()
 		c.JSON(http.StatusNotFound, gin.H{
 			"success": false,
-			"error":   "New proxy not found",
+			"error":   "New proxy not found or already in use",
+			"message": err.Error(),
+		})
+		return
+	}
+
+	// 更新新代理状态为1（正在使用）
+	err = tx.Table("proxy").
+		Where("id = ?", req.NewProxyID).
+		Update("status", 1).Error
+
+	if err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to lock new proxy",
+			"message": err.Error(),
+		})
+		return
+	}
+
+	// 提交事务
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to commit proxy lock",
 			"message": err.Error(),
 		})
 		return
@@ -1862,6 +1941,9 @@ func ReplaceProxyHandler(c *gin.Context) {
 	// 检查新代理是否可用
 	isAvailable, _, errorMsg, _ = checkProxyAvailability(newProxy)
 	if !isAvailable {
+		// 释放刚锁定的新代理
+		releaseProxyStatus(req.NewProxyID)
+
 		// 记录更换失败的日志
 		if logErr := LogProxyReplacement(
 			int(oldProxy.ID), int(newProxy.ID),
@@ -1942,6 +2024,9 @@ func ReplaceProxyHandler(c *gin.Context) {
 	// 调用设置代理接口进行更换
 	successCount, failureCount, err := callSetProxyAPI(aiBoxDevices, cloudDevices, req.NewProxyID)
 	if err != nil {
+		// 更换失败，释放新代理
+		releaseProxyStatus(req.NewProxyID)
+
 		// 记录更换失败的日志
 		if logErr := LogProxyReplacement(
 			int(oldProxy.ID), int(newProxy.ID),
@@ -1969,6 +2054,16 @@ func ReplaceProxyHandler(c *gin.Context) {
 	reason := "手动更换代理"
 	if failureCount > 0 {
 		reason = fmt.Sprintf("手动更换代理（部分失败：成功%d，失败%d）", successCount, failureCount)
+	}
+
+	// 更换成功或部分成功，释放旧代理
+	if successCount > 0 {
+		releaseProxyStatus(req.OldProxyID)
+	}
+
+	// 如果完全失败，也要释放新代理
+	if successCount == 0 {
+		releaseProxyStatus(req.NewProxyID)
 	}
 
 	if logErr := LogProxyReplacement(
@@ -2257,10 +2352,12 @@ func performAsyncProxyCheck(taskID string, task *AsyncCheckStatus) {
 }
 
 // DeviceForProxy 用于设置代理接口的设备结构
+// DeviceForProxy 用于批量设置代理的设备信息
 type DeviceForProxy struct {
 	DeviceID   string `json:"device_id"`   // dev_code
 	DeviceType int    `json:"device_type"` // 1=盒子, 2=云机
 	ProxyID    int64  `json:"proxy_id"`    // 新的代理ID
+	ID         int64  `json:"-"`           // 数据库ID，不发送给API
 }
 
 // getDevicesUsingProxy 获取使用指定代理的设备列表
@@ -2270,11 +2367,12 @@ func getDevicesUsingProxy(proxyID int64) ([]DeviceForProxy, []DeviceForProxy, in
 
 	// 获取使用该代理的AI盒子设备
 	var aiBoxResults []struct {
+		ID      int64  `gorm:"column:id"`
 		DevCode string `gorm:"column:dev_code"`
 	}
 	err := db.G.Table("ai_box_device").
 		Where("proxy_id = ? AND deleted_at IS NULL", proxyID).
-		Select("dev_code").
+		Select("id, dev_code").
 		Scan(&aiBoxResults).Error
 	if err != nil {
 		return nil, nil, 0, fmt.Errorf("failed to get ai box devices: %v", err)
@@ -2282,6 +2380,7 @@ func getDevicesUsingProxy(proxyID int64) ([]DeviceForProxy, []DeviceForProxy, in
 
 	for _, device := range aiBoxResults {
 		aiBoxDevices = append(aiBoxDevices, DeviceForProxy{
+			ID:         device.ID,
 			DeviceID:   device.DevCode,
 			DeviceType: 1,
 		})
@@ -2289,11 +2388,12 @@ func getDevicesUsingProxy(proxyID int64) ([]DeviceForProxy, []DeviceForProxy, in
 
 	// 获取使用该代理的云设备
 	var cloudResults []struct {
+		ID      int64  `gorm:"column:id"`
 		DevCode string `gorm:"column:dev_code"`
 	}
 	err = db.G.Table("cloud_device").
 		Where("proxy_id = ? AND deleted_at IS NULL", proxyID).
-		Select("dev_code").
+		Select("id, dev_code").
 		Scan(&cloudResults).Error
 	if err != nil {
 		return nil, nil, 0, fmt.Errorf("failed to get cloud devices: %v", err)
@@ -2301,6 +2401,7 @@ func getDevicesUsingProxy(proxyID int64) ([]DeviceForProxy, []DeviceForProxy, in
 
 	for _, device := range cloudResults {
 		cloudDevices = append(cloudDevices, DeviceForProxy{
+			ID:         device.ID,
 			DeviceID:   device.DevCode,
 			DeviceType: 2,
 		})
@@ -2310,7 +2411,7 @@ func getDevicesUsingProxy(proxyID int64) ([]DeviceForProxy, []DeviceForProxy, in
 	return aiBoxDevices, cloudDevices, totalCount, nil
 }
 
-// callSetProxyAPI 调用设置代理接口
+// callSetProxyAPI 调用设置代理接口并更新proxy表
 func callSetProxyAPI(aiBoxDevices, cloudDevices []DeviceForProxy, newProxyID int64) (int, int, error) {
 	// 合并设备列表并设置新的代理ID
 	var allDevices []DeviceForProxy
@@ -2366,6 +2467,21 @@ func callSetProxyAPI(aiBoxDevices, cloudDevices []DeviceForProxy, newProxyID int
 
 	if response.Code != 200 {
 		return 0, len(allDevices), fmt.Errorf("set proxy API failed: %s", response.Msg)
+	}
+
+	// API调用成功后，更新proxy表的device_id和device_type
+	// 注意：如果多个设备使用同一个proxy，只记录第一个设备的信息
+	// 根据业务逻辑，理想情况下每个proxy只应该被一个设备使用
+	if len(allDevices) > 0 {
+		firstDevice := allDevices[0]
+		err := assignProxyToDevice(newProxyID, firstDevice.ID, firstDevice.DeviceType)
+		if err != nil {
+			log.Printf("警告: 更新代理 %d 的设备信息失败: %v", newProxyID, err)
+		}
+
+		if len(allDevices) > 1 {
+			log.Printf("警告: 代理 %d 被 %d 个设备使用，proxy表只记录第一个设备的信息", newProxyID, len(allDevices))
+		}
 	}
 
 	return len(allDevices), 0, nil

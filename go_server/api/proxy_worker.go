@@ -340,11 +340,17 @@ func replaceUnavailableProxies(unavailableProxies []ProxyStatus) {
 			reason = "自动更换失败"
 			errorMsg = err.Error()
 			log.Printf("错误: 调用设置代理接口失败: %v", err)
+			// 更换失败，释放新代理的占用状态
+			releaseProxyStatus(replacement.ID)
 		} else if failureCount > 0 {
 			reason = fmt.Sprintf("自动更换部分成功（成功%d，失败%d）", successCount, failureCount)
 			log.Printf("警告: 代理更换部分失败，成功: %d，失败: %d", successCount, failureCount)
+			// 部分失败，仍然释放旧代理
+			releaseProxyStatus(failedProxy.ProxyInfo.ID)
 		} else {
 			log.Printf("成功更换代理，影响 %d 个设备", successCount)
+			// 更换成功，释放旧代理的占用状态
+			releaseProxyStatus(failedProxy.ProxyInfo.ID)
 		}
 
 		// 记录更换结果

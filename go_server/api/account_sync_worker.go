@@ -207,6 +207,9 @@ func checkAndReplaceProxyForDevice(devCode string) (bool, error) {
 	log.Printf("信息: 为设备 %s 找到替代代理 %d (%s)。正在更新...", devCode, replacement.ID, replacement.IP)
 
 	if err := db.G.Table(deviceInfo.DeviceType).Where("id = ?", deviceInfo.ID).Update("proxy_id", replacement.ID).Error; err != nil {
+		// 更新失败，释放新代理
+		releaseProxyStatus(replacement.ID)
+		
 		LogProxyReplacement(
 			int(proxyInfo.ID), int(replacement.ID),
 			int(proxyInfo.MerchantID), int(replacement.MerchantID),
@@ -218,6 +221,14 @@ func checkAndReplaceProxyForDevice(devCode string) (bool, error) {
 		)
 		return false, fmt.Errorf("更新设备 %s 的代理失败: %w", devCode, err)
 	}
+
+	// 更新成功，先分配新代理给设备，然后释放旧代理
+	deviceType := 1 // ai_box_device
+	if deviceInfo.DeviceType == "cloud_device" {
+		deviceType = 2
+	}
+	assignProxyToDevice(replacement.ID, deviceInfo.ID, deviceType)
+	releaseProxyStatus(proxyInfo.ID)
 
 	LogProxyReplacement(
 		int(proxyInfo.ID), int(replacement.ID),
