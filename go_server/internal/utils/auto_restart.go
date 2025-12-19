@@ -75,7 +75,7 @@ func CheckMemoryAndRestart(serviceName string, memoryUsageMB float64) {
 	autoRestartManager.mutex.Unlock()
 
 	// Perform restart
-	go performServiceRestart(service)
+	//go performServiceRestart(service)
 }
 
 // performServiceRestart performs the actual service restart
