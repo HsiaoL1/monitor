@@ -124,27 +124,30 @@ cd %s
 		log.Printf("❌ Auto-restart failed: Cannot create temp script: %v", err)
 		return
 	}
-	defer os.Remove(tmpFile.Name())
+	tmpFileName := tmpFile.Name()
 
 	// Write wrapper script
 	if _, err := tmpFile.WriteString(wrapperScript); err != nil {
 		tmpFile.Close()
+		os.Remove(tmpFileName)
 		log.Printf("❌ Auto-restart failed: Cannot write temp script: %v", err)
 		return
 	}
 	tmpFile.Close()
 
 	// Make script executable
-	if err := os.Chmod(tmpFile.Name(), 0755); err != nil {
+	if err := os.Chmod(tmpFileName, 0755); err != nil {
+		os.Remove(tmpFileName)
 		log.Printf("❌ Auto-restart failed: Cannot make script executable: %v", err)
 		return
 	}
 
 	// Execute restart script
-	restartCmd := exec.Command("/bin/bash", tmpFile.Name())
+	restartCmd := exec.Command("/bin/bash", tmpFileName)
 	restartCmd.Env = os.Environ()
 
 	if err := restartCmd.Start(); err != nil {
+		os.Remove(tmpFileName)
 		log.Printf("❌ Auto-restart failed: Cannot start deploy script: %v", err)
 		return
 	}
@@ -152,6 +155,9 @@ cd %s
 	// Wait for restart completion in background
 	go func() {
 		restartCmd.Wait()
+		
+		// Clean up temp file after script execution completes
+		os.Remove(tmpFileName)
 
 		// Verify service is running after restart
 		time.Sleep(5 * time.Second)
