@@ -144,7 +144,7 @@ func (s *JSONCICDStore) CreateDeployment(deployment *models.Deployment) error {
 }
 
 // UpdateDeployment updates deployment status and logs
-func (s *JSONCICDStore) UpdateDeployment(id int64, updates map[string]interface{}) error {
+func (s *JSONCICDStore) UpdateDeployment(id int64, updates map[string]any) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -438,9 +438,9 @@ func (s *JSONCICDStore) GetLatestSuccessfulDeployment(serviceName string, enviro
 	var latest *models.Deployment
 	for _, d := range deployments {
 		if d.ServiceName == serviceName &&
-		   d.Environment == environment &&
-		   d.Status == models.StatusSuccess &&
-		   (excludeID == 0 || d.ID != excludeID) {
+			d.Environment == environment &&
+			d.Status == models.StatusSuccess &&
+			(excludeID == 0 || d.ID != excludeID) {
 			if latest == nil || d.CreatedAt.After(latest.CreatedAt) {
 				deployment := d
 				latest = &deployment

@@ -4,6 +4,7 @@ import (
 	"context"
 	"control/go_server/db"
 	"control/go_server/internal/storage"
+	"control/go_server/internal/utils"
 	"fmt"
 	"log"
 	"sync"
@@ -108,13 +109,19 @@ func executeAndLog() {
 	}
 	wg.Wait()
 
-	// 3. 筛选出不可用的代理
+	// 3. 筛选出可用和不可用的代理
 	var unavailableProxies []ProxyStatus
+	var availableProxies []ProxyStatus
 	for _, status := range proxyStatuses {
 		if !status.IsAvailable {
 			unavailableProxies = append(unavailableProxies, status)
+		} else {
+			availableProxies = append(availableProxies, status)
 		}
 	}
+
+	// 将可用代理更新到 Redis
+	updateAvailableProxiesInRedis(availableProxies)
 
 	log.Printf("检测到 %d 个不可用代理", len(unavailableProxies))
 	if len(unavailableProxies) == 0 {
@@ -136,6 +143,59 @@ func executeAndLog() {
 	autoReplaceTaskMutex.Lock()
 	autoReplaceStatusMessage = "更换完成，等待下一轮检测..."
 	autoReplaceTaskMutex.Unlock()
+}
+
+// updateAvailableProxiesInRedis 将可用的代理信息存储到 Redis 集合中
+func updateAvailableProxiesInRedis(availableProxies []ProxyStatus) {
+	log.Printf("发现 %d 个可用代理，准备更新到 Redis...", len(availableProxies))
+
+	proxiesToStore := availableProxies
+	if len(proxiesToStore) > 10 {
+		proxiesToStore = proxiesToStore[:10]
+	}
+
+	var proxyURLs []any
+	for _, p := range proxiesToStore {
+		proxyInfo := p.ProxyInfo
+		proxyType := proxyInfo.ProxyType
+		if proxyType == "" {
+			proxyType = "http" // 默认 http
+		}
+
+		var auth string
+		if proxyInfo.Account != "" {
+			auth = fmt.Sprintf("%s:%s@", proxyInfo.Account, proxyInfo.Password)
+		}
+
+		proxyURL := fmt.Sprintf("%s://%s%s:%s", proxyType, auth, proxyInfo.IP, proxyInfo.Port)
+		proxyURLs = append(proxyURLs, proxyURL)
+	}
+
+	redisClient, err := utils.ConnectRedis()
+	if err != nil {
+		log.Printf("错误: 无法连接到 Redis 来更新可用代理: %v", err)
+		return
+	}
+	defer redisClient.Close()
+
+	const redisKey = "available_proxies"
+	ctx := context.Background()
+
+	// 先删除旧的集合
+	if err := redisClient.Del(ctx, redisKey).Err(); err != nil {
+		log.Printf("警告: 删除旧的 Redis 代理集合 '%s' 失败: %v", redisKey, err)
+	}
+
+	if len(proxyURLs) > 0 {
+		// 添加新的代理到集合
+		if err := redisClient.SAdd(ctx, redisKey, proxyURLs...).Err(); err != nil {
+			log.Printf("错误: SADD 新代理到 Redis 集合 '%s' 失败: %v", redisKey, err)
+		} else {
+			log.Printf("成功将 %d 个可用代理存储到 Redis 集合 '%s'", len(proxyURLs), redisKey)
+		}
+	} else {
+		log.Println("没有可用的代理，Redis 集合已清空")
+	}
 }
 
 // getDevicesAndProxies 封装了获取设备和代理信息的逻辑
@@ -271,20 +331,26 @@ func replaceUnavailableProxies(unavailableProxies []ProxyStatus) {
 
 		// 调用设置代理接口进行更换
 		successCount, failureCount, err := callSetProxyAPI(aiBoxDevices, cloudDevices, replacement.ID)
-		
+
 		isSuccess := (err == nil && failureCount == 0)
 		reason := "自动更换成功"
 		errorMsg := ""
-		
+
 		if err != nil {
 			reason = "自动更换失败"
 			errorMsg = err.Error()
 			log.Printf("错误: 调用设置代理接口失败: %v", err)
+			// 更换失败，释放新代理的占用状态
+			releaseProxyStatus(replacement.ID)
 		} else if failureCount > 0 {
 			reason = fmt.Sprintf("自动更换部分成功（成功%d，失败%d）", successCount, failureCount)
 			log.Printf("警告: 代理更换部分失败，成功: %d，失败: %d", successCount, failureCount)
+			// 部分失败，仍然释放旧代理
+			releaseProxyStatus(failedProxy.ProxyInfo.ID)
 		} else {
 			log.Printf("成功更换代理，影响 %d 个设备", successCount)
+			// 更换成功，释放旧代理的占用状态
+			releaseProxyStatus(failedProxy.ProxyInfo.ID)
 		}
 
 		// 记录更换结果
@@ -297,11 +363,11 @@ func replaceUnavailableProxies(unavailableProxies []ProxyStatus) {
 			reason, errorMsg,
 			"system", "auto",
 		)
-		
+
 		// 清除相关代理的缓存
 		invalidateProxyCache(failedProxy.ProxyInfo.ID)
 		invalidateProxyCache(replacement.ID)
-		
+
 		// 释放锁
 		ProxyReplaceMutex.Unlock()
 	}

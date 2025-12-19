@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Card, Tabs, Button, Space, Input, Row, Col, message } from "antd";
+import { Card, Tabs, Button, Space, Input, message } from "antd";
 import {
   FullscreenOutlined,
   FullscreenExitOutlined,

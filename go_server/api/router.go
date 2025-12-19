@@ -123,8 +123,30 @@ func SetupRouter() *gin.Engine {
 				cicdGroup.GET("/stats", cicdHandler.GetDeploymentStats)
 			}
 
+			auth.GET("/device-app-versions", GetDeviceAppVersionsHandler)
+
+			// Batch update routes
+			batchGroup := auth.Group("/v1/internal/cloud/batch")
+			{
+				batchGroup.POST("/update_app_external", BatchUpdateAppExternalHandler)
+				batchGroup.POST("/update_plugin_external", BatchUpdatePluginExternalHandler)
+			}
+
 			// Pprof routes
 			auth.GET("/pprof/:serviceName/flamegraph", PprofFlamegraphHandler)
+
+			// Browser Server Management
+			browserServerGroup := auth.Group("/browser-servers")
+			{
+				browserServerGroup.GET("", GetBrowserServersHandler)
+				browserServerGroup.POST("", CreateBrowserServerHandler)
+				browserServerGroup.PUT("/:id", UpdateBrowserServerHandler)
+				browserServerGroup.DELETE("/:id", DeleteBrowserServerHandler)
+				browserServerGroup.POST("/batch-update-status", BatchUpdateBrowserServerStatusHandler)
+				browserServerGroup.GET("/stats", GetBrowserServerStatsHandler)
+			}
+			auth.GET("/browser-accounts", GetBrowserAccountsHandler)
+			auth.POST("/browser-accounts/relogin", ReloginBrowserAccountsHandler)
 		}
 	}
 

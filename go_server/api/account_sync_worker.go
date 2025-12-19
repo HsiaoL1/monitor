@@ -122,6 +122,131 @@ func autoAccountRestartWorker(ctx context.Context) {
 	}
 }
 
+// DeviceBasicInfo to hold basic device info
+type DeviceBasicInfo struct {
+	ID         int64
+	ProxyID    int64
+	MerchantID int64
+	DeviceType string // "ai_box_device" or "cloud_device"
+}
+
+func getDeviceBasicInfo(devCode string) (DeviceBasicInfo, bool) {
+	var deviceInfo DeviceBasicInfo
+
+	var aiBoxDevice struct {
+		ID         int64
+		ProxyID    int64
+		MerchantID int64
+	}
+	if err := db.G.Table("ai_box_device").Where("dev_code = ? AND deleted_at IS NULL", devCode).Select("id, proxy_id, merchant_id").First(&aiBoxDevice).Error; err == nil {
+		deviceInfo.ID = aiBoxDevice.ID
+		deviceInfo.ProxyID = aiBoxDevice.ProxyID
+		deviceInfo.MerchantID = aiBoxDevice.MerchantID
+		deviceInfo.DeviceType = "ai_box_device"
+		return deviceInfo, true
+	}
+
+	var cloudDevice struct {
+		ID         int64
+		ProxyID    int64
+		MerchantID int64
+	}
+	if err := db.G.Table("cloud_device").Where("dev_code = ? AND deleted_at IS NULL", devCode).Select("id, proxy_id, merchant_id").First(&cloudDevice).Error; err == nil {
+		deviceInfo.ID = cloudDevice.ID
+		deviceInfo.ProxyID = cloudDevice.ProxyID
+		deviceInfo.MerchantID = cloudDevice.MerchantID
+		deviceInfo.DeviceType = "cloud_device"
+		return deviceInfo, true
+	}
+
+	return deviceInfo, false
+}
+
+func checkAndReplaceProxyForDevice(devCode string) (bool, error) {
+	if devCode == "" {
+		return true, nil // No device, no proxy, so it's "ok"
+	}
+
+	deviceInfo, found := getDeviceBasicInfo(devCode)
+	if !found || deviceInfo.ProxyID == 0 {
+		return true, nil // No device or no proxy assigned, consider it ok.
+	}
+
+	var proxyInfo ProxyInfo
+	if err := db.G.Table("proxy").Where("id = ? AND deleted_at IS NULL", deviceInfo.ProxyID).First(&proxyInfo).Error; err != nil {
+		return false, fmt.Errorf("获取代理信息失败 (ID: %d): %w", deviceInfo.ProxyID, err)
+	}
+
+	isAvailable, _, _, _ := checkProxyAvailability(proxyInfo)
+	if isAvailable {
+		log.Printf("信息: 设备 %s 的代理 %d (%s) 可用。", devCode, proxyInfo.ID, proxyInfo.IP)
+		return true, nil
+	}
+
+	log.Printf("警告: 设备 %s 的代理 %d (%s) 不可用，尝试更换...", devCode, proxyInfo.ID, proxyInfo.IP)
+
+	replacement, found, err := findAvailableReplacement(proxyInfo.MerchantID, proxyInfo.ID, proxyInfo.CountryCode)
+	if err != nil {
+		return false, fmt.Errorf("查找替代代理失败: %w", err)
+	}
+
+	if !found {
+		log.Printf("警告: 设备 %s 没有找到可用的替代代理。", devCode)
+		LogProxyReplacement(
+			int(proxyInfo.ID), 0,
+			int(proxyInfo.MerchantID), 0,
+			proxyInfo.IP, proxyInfo.Port,
+			"", "",
+			false, 1, // 1 device affected
+			"自动重启前更换失败", "未找到可用替代代理",
+			"system", "auto-restart",
+		)
+		return false, nil
+	}
+
+	log.Printf("信息: 为设备 %s 找到替代代理 %d (%s)。正在更新...", devCode, replacement.ID, replacement.IP)
+
+	if err := db.G.Table(deviceInfo.DeviceType).Where("id = ?", deviceInfo.ID).Update("proxy_id", replacement.ID).Error; err != nil {
+		// 更新失败，释放新代理
+		releaseProxyStatus(replacement.ID)
+		
+		LogProxyReplacement(
+			int(proxyInfo.ID), int(replacement.ID),
+			int(proxyInfo.MerchantID), int(replacement.MerchantID),
+			proxyInfo.IP, proxyInfo.Port,
+			replacement.IP, replacement.Port,
+			false, 1,
+			"自动重启前更换失败", fmt.Sprintf("更新设备代理失败: %v", err),
+			"system", "auto-restart",
+		)
+		return false, fmt.Errorf("更新设备 %s 的代理失败: %w", devCode, err)
+	}
+
+	// 更新成功，先分配新代理给设备，然后释放旧代理
+	deviceType := 1 // ai_box_device
+	if deviceInfo.DeviceType == "cloud_device" {
+		deviceType = 2
+	}
+	assignProxyToDevice(replacement.ID, deviceInfo.ID, deviceType)
+	releaseProxyStatus(proxyInfo.ID)
+
+	LogProxyReplacement(
+		int(proxyInfo.ID), int(replacement.ID),
+		int(proxyInfo.MerchantID), int(replacement.MerchantID),
+		proxyInfo.IP, proxyInfo.Port,
+		replacement.IP, replacement.Port,
+		true, 1,
+		"自动重启前更换成功", "",
+		"system", "auto-restart",
+	)
+
+	invalidateProxyCache(proxyInfo.ID)
+	invalidateProxyCache(replacement.ID)
+
+	log.Printf("成功: 设备 %s 的代理已从 %d 更新为 %d。", devCode, proxyInfo.ID, replacement.ID)
+	return true, nil
+}
+
 // executeAccountRestart 执行账号重启检测和操作
 func executeAccountRestart() {
 	log.Println("开始执行账号自动重启检测...")
@@ -144,7 +269,7 @@ func executeAccountRestart() {
 	// 获取所有有dev_code且状态正常的社媒账号
 	var accounts []SocialAccount
 	if err := db.G.Table("social_accounts").
-		Where("deleted_at IS NULL AND dev_code IS NOT NULL AND dev_code != '' AND account_status = 1").
+		Where("deleted_at IS NULL AND dev_code IS NOT NULL AND dev_code != '' AND account_status = 1 AND online_status = 0").
 		Select("id, merchant_id, account, app_unique_id, platform_id, online_status, account_status, dev_code,account_type").
 		Scan(&accounts).Error; err != nil {
 		log.Printf("错误: 获取社媒账号失败: %v", err)
@@ -244,6 +369,16 @@ func executeAccountRestart() {
 		// 	continue
 		// }
 
+		// 如果账号的心跳时间不在今天，跳过
+		if onlineInfo.HeartbeatTime > 0 {
+			heartbeatDate := time.Unix(onlineInfo.HeartbeatTime, 0).Format("2006-01-02")
+			currentDate := time.Now().Format("2006-01-02")
+			if heartbeatDate != currentDate {
+				log.Printf("信息: 账号 %s 的最后心跳时间 %s 不在今天，跳过重启。", userKey, heartbeatDate)
+				continue
+			}
+		}
+
 		// 4. 重启频率限制检查
 		redisCtx := context.Background()
 		redisKey := fmt.Sprintf("account:restart:count:%s", userKey)
@@ -255,6 +390,33 @@ func executeAccountRestart() {
 		}
 
 		rdb.Expire(redisCtx, redisKey, 15*time.Minute)
+
+		// 新增：检查并更换代理
+		// if account.DevCode != "" {
+		// 	_, err := checkAndReplaceProxyForDevice(account.DevCode)
+		// 	if err != nil {
+		// 		log.Printf("错误: 检查或更换代理失败 for device %s: %v", account.DevCode, err)
+		// 	}
+		// if proxyOK {
+		// 	log.Printf("信息: 设备 %s 的代理不可用且无法更换，跳过重启账号 %s。", account.DevCode, account.AppUniqueID)
+		// 	continue // Skip to next account
+		// }
+		// }
+
+		// 等待一段时间，看看状态恢复了没有，如果恢复了，就不必重启了
+		// time.Sleep(90 * time.Second)
+		// 再次查询一下在线状态
+		// var latestOnlineStatus int
+		// if err := db.G.Table("social_accounts").Where("id = ?", account.ID).Select("online_status").Scan(&latestOnlineStatus).Error; err != nil {
+		// 	log.Printf("错误: 查询账号 %s 最新在线状态失败: %v", userKey, err)
+		// 	continue
+		// }
+		// if latestOnlineStatus == 1 {
+		// 	log.Printf("信息: 账号 %s 在等待期间已恢复在线，跳过重启。", userKey)
+		// 	continue
+		// }
+
+		// 如果60分钟内重启次数超过6次，则标记为异常
 
 		if count > 6 {
 			log.Printf("警告: 账号 %s 在15分钟内重启次数超过6次，将被标记为异常。", userKey)
@@ -417,6 +579,27 @@ func executeRestartOperation(info RestartAccountInfo) bool {
 
 	// 使用 goroutine 异步执行重启
 	go func() {
+		// 先检查一下代理是否可用
+		// _, err := checkAndReplaceProxyForDevice(info.DevCode)
+		// if err != nil {
+		// 	log.Printf("检查或更换代理失败: 账号=%s, 设备=%s, 错误=%v", info.AppUniqueID, info.DevCode, err)
+		// }
+		// 等待一段时间，看看恢复了没有
+		time.Sleep(90 * time.Second)
+
+		// 再次查询一下在线状态
+		var latestOnlineStatus int
+		if err := db.G.Table("social_accounts").Where("app_unique_id = ?", info.AppUniqueID).Select("online_status").Scan(&latestOnlineStatus).Error; err != nil {
+			log.Printf("查询账号最新在线状态失败: 账号=%s, 错误=%v", info.AppUniqueID, err)
+			return
+		}
+
+		// 如果恢复在线，跳过重启
+		if latestOnlineStatus == 1 {
+			log.Printf("账号在等待期间已恢复在线，跳过重启: 账号=%s", info.AppUniqueID)
+			return
+		}
+
 		// 先强制停止
 		if err := ForceStop(info.DevCode, info.DevType, info.Pkg); err != nil {
 			log.Printf("强制停止失败: 账号=%s, 设备=%s, 错误=%v", info.AppUniqueID, info.DevCode, err)

@@ -61,9 +61,9 @@ func LaunchApp(devCode string, devType int, pkg string) (err error) {
 
 	if resp.StatusCode == 200 {
 		var result struct {
-			Code int         `json:"code"`
-			Data interface{} `json:"data"`
-			Msg  string      `json:"msg"`
+			Code int    `json:"code"`
+			Data any    `json:"data"`
+			Msg  string `json:"msg"`
 		}
 		if err = json.NewDecoder(resp.Body).Decode(&result); err != nil {
 			return
@@ -111,9 +111,9 @@ func ForceStop(devCode string, devType int, pkg string) (err error) {
 
 	if resp.StatusCode == 200 {
 		var result struct {
-			Code int         `json:"code"`
-			Data interface{} `json:"data"`
-			Msg  string      `json:"msg"`
+			Code int    `json:"code"`
+			Data any    `json:"data"`
+			Msg  string `json:"msg"`
 		}
 		if err = json.NewDecoder(resp.Body).Decode(&result); err != nil {
 			fmt.Println("Error decoding response body:", err)
@@ -154,22 +154,5 @@ func isValidBoxYun(s string) bool {
 			return false
 		}
 	}
-	return true
-}
-
-func isValidWhatsAppEmail(s string) bool {
-	const suffix = "@s.whatsapp.net"
-	if len(s) <= len(suffix) {
-		return false
-	}
-	for i := 0; i < len(suffix); i++ {
-		if s[len(s)-len(suffix)+i] != suffix[i] {
-			return false
-		}
-	}
-	if len(s) == len(suffix) {
-		return false
-	}
-
 	return true
 }
