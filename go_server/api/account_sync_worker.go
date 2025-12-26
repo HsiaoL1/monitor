@@ -2,8 +2,6 @@ package api
 
 import (
 	"context"
-	"control/go_server/db"
-	"control/go_server/internal/utils"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -11,6 +9,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"control/go_server/db"
+	"control/go_server/internal/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -209,7 +210,7 @@ func checkAndReplaceProxyForDevice(devCode string) (bool, error) {
 	if err := db.G.Table(deviceInfo.DeviceType).Where("id = ?", deviceInfo.ID).Update("proxy_id", replacement.ID).Error; err != nil {
 		// 更新失败，释放新代理
 		releaseProxyStatus(replacement.ID)
-		
+
 		LogProxyReplacement(
 			int(proxyInfo.ID), int(replacement.ID),
 			int(proxyInfo.MerchantID), int(replacement.MerchantID),
@@ -443,7 +444,7 @@ func executeAccountRestart() {
 
 		// 5. 确定设备类型
 		devType := 0
-		var getDevType = func() int {
+		getDevType := func() int {
 			if isValidBaiduYun(account.DevCode) {
 				return 2 // 百度云机
 			} else if isValidBoxYun(account.DevCode) {
